@@ -1,0 +1,16 @@
+{
+  "name": "solfa-editor",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "dev": "pnpm --filter @solfa/pwa dev",
+    "build": "pnpm --filter @solfa/pwa build",
+    "preview": "pnpm --filter @solfa/pwa preview",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "tauri": "pnpm --filter @solfa/desktop tauri",
+    "tauri:dev": "pnpm --filter @solfa/pwa build && pnpm --filter @solfa/desktop tauri dev",
+    "tauri:build": "pnpm --filter @solfa/pwa build && pnpm --filter @solfa/desktop tauri build"
+  }
+}

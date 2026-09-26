@@ -1,0 +1,117 @@
+:root {
+  --solfa-note: #1d1b18;
+  --solfa-muted: #8a8378;
+  --solfa-key: #8a4b1f;
+  --solfa-bar: #3a362f;
+  --solfa-error: #c0392b;
+  --solfa-surface: #ffffff;
+  --solfa-border: #e4dfd6;
+  --solfa-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --solfa-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --solfa-note: #e8e6e1;
+    --solfa-muted: #7d8590;
+    --solfa-key: #e2a36b;
+    --solfa-bar: #c8c4bd;
+    --solfa-error: #ff6b5e;
+    --solfa-surface: #1c1f25;
+    --solfa-border: #2e333c;
+  }
+}
+
+.solfa-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  font-family: var(--solfa-font);
+  color: var(--solfa-note);
+}
+
+.solfa-editor-canvas {
+  overflow: auto;
+  background: var(--solfa-surface);
+  border: 1px solid var(--solfa-border);
+  border-radius: 10px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.solfa-canvas {
+  display: block;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.solfa-editor-side {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 0;
+}
+
+.solfa-text {
+  overflow: hidden;
+  border: 1px solid var(--solfa-border);
+  border-radius: 10px;
+  background: var(--solfa-surface);
+  min-height: 0;
+}
+
+.solfa-text .cm-editor {
+  height: 100%;
+  font-family: var(--solfa-mono);
+  font-size: 14px;
+}
+
+.solfa-text .cm-editor.cm-focused {
+  outline: none;
+}
+
+.solfa-text .cm-scroller {
+  font-family: var(--solfa-mono);
+  line-height: 1.7;
+}
+
+.solfa-text .cm-gutters {
+  background: transparent;
+  color: var(--solfa-muted);
+  border-right: 1px solid var(--solfa-border);
+}
+
+.solfa-text .cm-tooltip {
+  background: var(--solfa-surface);
+  border: 1px solid var(--solfa-border);
+  border-radius: 8px;
+}
+
+.solfa-editor-status {
+  font-size: 12px;
+  color: var(--solfa-muted);
+  min-height: 20px;
+  padding: 4px 6px;
+}
+
+.solfa-editor-status[data-valid="false"] {
+  color: var(--solfa-error);
+}
+
+.solfa-editor-errors {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.solfa-editor-errors li {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 900px) {
+  .solfa-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) minmax(180px, 1fr);
+  }
+}
