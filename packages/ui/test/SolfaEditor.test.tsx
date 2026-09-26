@@ -532,3 +532,66 @@ describe('SolfaEditor: lyrics', () => {
     await waitFor(() => expect(doc.getState().text).toContain('P: _ : re : mi : fa'));
   });
 });
+
+describe('the key line', () => {
+  function timeSelect(): HTMLSelectElement {
+    const select = document.querySelector('[data-testid="solfa-time-select"]');
+    if (!(select instanceof HTMLSelectElement)) throw new Error('no time signature select');
+    return select;
+  }
+
+  function tonic(): string {
+    const node = document.querySelector('[data-testid="solfa-key-line-tonic"]');
+    return node?.textContent ?? '';
+  }
+
+  it('shows the tonic with its alteration and the default signature', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    expect(tonic()).toBe('Do nat C');
+    expect(timeSelect().value).toBe('4/4');
+  });
+
+  it('reads the tonic of a transposed score', () => {
+    const doc = new SolfaDocument([':do=F#', '|', 'S: d : r'].join('\n'));
+    render(<Harness document={doc} />);
+    expect(tonic()).toBe('Fa dia F#');
+  });
+
+  it('changes the signature from the dropdown and writes it to the text', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    fireEvent.change(timeSelect(), { target: { value: '6/8' } });
+    expect(doc.getState().score.timeSignature).toBe('6/8');
+    expect(doc.getState().text).toContain(':time=6/8');
+  });
+
+  it('follows a signature written in the text', () => {
+    const doc = new SolfaDocument([':time=3/4', '|', 'S: d : r : m'].join('\n'));
+    render(<Harness document={doc} />);
+    expect(timeSelect().value).toBe('3/4');
+  });
+
+  it('can be undone', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    fireEvent.change(timeSelect(), { target: { value: '2/4' } });
+    act(() => {
+      doc.dispatch({ type: 'history/undo' });
+    });
+    expect(doc.getState().score.timeSignature).toBe('4/4');
+    expect(doc.getState().text).not.toContain(':time');
+  });
+
+  it('sits on the left, under the heading', () => {
+    const doc = new SolfaDocument([':title=Ave Maria', ':subtitle=pour ch\u0153ur', CHOIR].join('\n'));
+    const { container } = render(<Harness document={doc} />);
+    const line = container.querySelector('.solfa-key-line');
+    if (!(line instanceof HTMLElement)) throw new Error('missing key line');
+    // Flush left, like the engraved key line.
+    expect(line.style.left).toBe(`${DEFAULT_LAYOUT.leftMargin}px`);
+    // And below the heading rather than beside the title.
+    const top = Number.parseFloat(line.style.top);
+    expect(top).toBeGreaterThan(DEFAULT_LAYOUT.topMargin + DEFAULT_LAYOUT.titleFontSize);
+  });
+});

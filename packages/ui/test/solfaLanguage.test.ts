@@ -56,3 +56,39 @@ describe('solfa language: title and subtitle', () => {
     expect(tokensOf(':mode=minor')[0]).toEqual(['atom', ':mode=minor']);
   });
 });
+
+describe('solfa language: measures', () => {
+  it('marks the time signature directive', () => {
+    expect(tokensOf(':time=4/4')).toEqual([['attributeName', ':time=4/4']]);
+    expect(tokensOf(':time=6/8')).toEqual([['attributeName', ':time=6/8']]);
+    expect(tokensOf(':time=C')).toEqual([['attributeName', ':time=C']]);
+  });
+
+  it('marks :meter like :time', () => {
+    expect(tokensOf(':meter=3/4')).toEqual([['attributeName', ':meter=3/4']]);
+  });
+
+  it('marks the colon between two beats', () => {
+    expect(tokensOf(['|', 'S: d : r : m'].join('\n'))).toEqual([
+      ['separator', '|'],
+      ['labelName', 'S:'],
+      ['atom', 'd'],
+      ['separator', ':'],
+      ['atom', 'r'],
+      ['separator', ':'],
+      ['atom', 'm'],
+    ]);
+  });
+
+  it('marks the bar that opens a group', () => {
+    expect(tokensOf(['|', 'S: d : r | m'].join('\n'))).toEqual([
+      ['separator', '|'],
+      ['labelName', 'S:'],
+      ['atom', 'd'],
+      ['separator', ':'],
+      ['atom', 'r'],
+      ['separator', '|'],
+      ['atom', 'm'],
+    ]);
+  });
+});

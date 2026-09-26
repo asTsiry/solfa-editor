@@ -195,6 +195,11 @@ describe('layout: choir', () => {
     // One barline opens the bar and one closes it.
     expect(lines(laid, 'barline')).toHaveLength(2);
     expect(lines(laid, 'group-barline')).toHaveLength(0);
+    // And nothing else is drawn as a line.
+    const roles = (laid.items as readonly { kind: string; role: string }[])
+      .filter((item) => item.kind === 'line')
+      .map((item) => item.role);
+    expect([...new Set(roles)].sort()).toEqual(['barline']);
   });
 
   it('draws a short barline at every group written with a |', () => {

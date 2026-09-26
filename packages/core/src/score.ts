@@ -1,5 +1,4 @@
 import type { Accidental, Key } from './pitch.js';
-import { DEFAULT_TIME_SIGNATURE } from './meter.js';
 
 export type { Accidental, Key };
 
@@ -60,6 +59,7 @@ export type Score = {
   readonly kind: 'score';
   readonly title: string | null;
   readonly subtitle: string | null;
+  /** Engraved for information; it neither groups nor validates the beats. */
   readonly timeSignature: string;
   readonly parts: readonly Part[];
   readonly sections: readonly Section[];

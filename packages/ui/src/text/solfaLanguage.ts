@@ -11,6 +11,8 @@ const SECTION_HEADER = /^\|[',]*[drmfslt]:m?/;
 const NUMBERED_SECTION = /^\|\d+[:.]/;
 const DIRECTIVE = /^:[A-Za-z]+=([A-Za-z][A-Za-z#b]*)?/;
 const PARTS_DIRECTIVE = /^:parts=[^\n]*/;
+// A time signature is numbers, a slash, or the two cut time forms C and C|.
+const TIME_DIRECTIVE = /^:(?:time|meter)=[A-Za-z0-9|/]+/;
 // A title is prose, so its value runs to the end of the line like the parser reads it.
 const HEADING_NAME = /^:(?:title|subtitle)=/;
 const PARTS_NAME = /^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ0-9 _'-]*/;
@@ -61,6 +63,8 @@ const solfaParser: StreamParser<SolfaStreamState> = {
 
     if (stream.match(PARTS_DIRECTIVE)) return 'attributeName';
 
+    if (stream.match(TIME_DIRECTIVE)) return 'attributeName';
+
     if (stream.match(HEADING_NAME)) {
       state.inHeadingValue = true;
       return 'attributeName';
@@ -79,6 +83,9 @@ const solfaParser: StreamParser<SolfaStreamState> = {
     }
 
     if (stream.match('~')) return 'null';
+
+    // A colon between two beats, like the bar that opens a group.
+    if (stream.match(/^:(?=\s|$)/)) return 'separator';
 
     if (stream.match(/^[,']+/)) {
       return stream.current().includes("'") ? 'atom' : 'modifier';

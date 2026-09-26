@@ -135,8 +135,9 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
     const keyLineSlot: KeyLineSlot = ((): KeyLineSlot => {
       for (const item of laid.items) {
         if (item.kind === 'glyph' && item.role === 'key-line') {
-          const box = textBox(item);
-          return { x: box.left, y: box.centerY, fontSize: item.fontSize };
+          // The key line is engraved flush left, so the overlay starts at the
+          // glyph x rather than at the centre of its box.
+          return { x: item.x, y: textBox(item).centerY, fontSize: item.fontSize };
         }
       }
       const y =

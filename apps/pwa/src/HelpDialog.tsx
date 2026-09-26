@@ -52,7 +52,11 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
         </p>
         <p>
           Le titre est gravé une seule fois, centré au-dessus du premier système,
-          et le sous-titre se place dessous en italique. Au-dessus de la
+          et le sous-titre se place dessous en italique. À gauche, sous
+          l&apos;en-tête, une ligne de tonalité indique la tonique avec son
+          altération écrite en toutes lettres (<code>Do nat C</code>,{' '}
+          <code>Fa dia F#</code>, <code>Si bem Bb</code>) puis le nombre de
+          temps. Au-dessus de la
           partition, un champ permet de taper le titre directement sur la
           partition, et le bouton <code>+ Sous-titre</code> ajoute ou retire la
           deuxième ligne.
@@ -115,6 +119,21 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
         <p>
           Les marques de durée ne s&apos;écrivent que sur la première ligne de
           mesure ; les autres lignes doivent compter le même nombre de notes.
+        </p>
+        <p>
+          Une mesure s&apos;ouvre avec un <code>|</code> seul sur sa ligne, et{' '}
+          <strong>ses temps se séparent un par un</strong> : un <code>:</code>{' '}
+          passe au temps suivant du même groupe, un <code>|</code> ouvre un
+          nouveau groupe. Une simple espace ne suffit pas, car les petites
+          barres de la gravure doivent être écrites. Le <code>:</code> ne se
+          grave pas, le <code>|</code> se grave en petite barre, et toutes les
+          voix d&apos;une mesure doivent regrouper leurs temps de la même façon.
+        </p>
+        <p>
+          Le nombre de temps est affiché à titre indicatif : les temps
+          s&apos;écrivent un par un, il ne les regroupe pas et ne les vérifie pas.
+          Il se choisit dans la liste déroulante à gauche de la portée, sous le
+          titre, à côté de la tonalité.
         </p>
 
         <h3>Les notes</h3>
@@ -205,7 +224,19 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
               <td>
                 <code>|</code>
               </td>
-              <td>Barre de mesure</td>
+              <td>Ouvre une mesure, ou un groupe à l&apos;intérieur d&apos;une mesure</td>
+            </tr>
+            <tr>
+              <td>
+                <code>:</code>
+              </td>
+              <td>Sépare deux temps d&apos;un même groupe</td>
+            </tr>
+            <tr>
+              <td>
+                <code>:time=4/4</code>
+              </td>
+              <td>Nombre de temps, aussi écrit <code>:meter=</code></td>
             </tr>
             <tr>
               <td>
@@ -257,7 +288,7 @@ P: Se_ : glori : fi : ca : ve : unt`}</pre>
           font de même, avec <kbd>Maj</kbd> pour les octaves.
         </p>
         <p>
-          Une syllabe se modifie directement sous la portée : cliquez-la, saisissez
+          Une syllabe se modifie directement sous les notes : cliquez-la, saisissez
           le texte, puis validez avec <kbd>Entrée</kbd> ou en cliquant ailleurs.
           <kbd>Échap</kbd> annule la saisie.
         </p>

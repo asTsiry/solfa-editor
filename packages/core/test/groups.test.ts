@@ -26,8 +26,8 @@ describe('the beats of a measure', () => {
 
   it('refuse two beats written next to each other', () => {
     const result = read(['|', 'S: d r m f']);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toContain(SEPARATOR);
+    expect(result.errors).toHaveLength(3);
+    for (const message of result.errors) expect(message).toContain(SEPARATOR);
   });
 
   it('refuse a missing separator in the middle of a bar', () => {
@@ -74,8 +74,9 @@ describe('the voices of a measure', () => {
 
   it('compare the groups of a whole measure, not of a single line', () => {
     const result = read(['|', 'S: d | r', 'A: r | m', 'T: m : f', 'B: f : s']);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toContain('same way');
+    // T and B each disagree with the groups adopted from S.
+    expect(result.errors).toHaveLength(2);
+    for (const message of result.errors) expect(message).toContain('same way');
   });
 
   it('take the groups of the first line of the measure', () => {
@@ -121,7 +122,7 @@ describe('writing a measure back', () => {
   });
 
   it('opens every measure on its own line', () => {
-    const result = read(['|1:', 'S: d : r', '|2:', 'S: m : f']);
-    expect(result.text).toBe(['|1:', 'S: d : r', '|2:', 'S: m : f', ''].join('\n'));
+    const result = read(['|', 'S: d : r', '|', 'S: m : f']);
+    expect(result.text).toBe(['|', 'S: d : r', '|', 'S: m : f', ''].join('\n'));
   });
 });

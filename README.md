@@ -22,18 +22,21 @@ always the tonic. A solfa letter therefore names a *scale degree*, not a pitch.
 | `.` | half pulse (may be written spaced) |
 | `~` | hold the previous note of this voice |
 | `0` | rest |
-| `|` | barline |
+| `|` at the start of a line | open a bar |
+| `:` between two beats | next beat, same group |
+| `\|` between two beats | next beat, new group |
 | `\|X:` | new section with `do = X`, major |
 | `\|X:m` | new section with `do = X`, minor |
 | `\|m:` | new section with `do = d`, minor |
 | `\|N:` | new numbered section, same key |
 | `:do=C` | set the tonic, e.g. `C`, `F#`, `Bb` |
 | `:mode=major` | set the mode, `major` or `minor` |
+| `:time=4/4` | set the time signature, also written `:meter=` |
 | `:parts=` | declare the voices |
 | `//` | comment to end of line |
 
-A note lasts two pulses by default (a crotchet), so a plain `d r m f` is four
-beats. A duration starts with `!` and is then extended: each `-` adds two
+A note lasts two pulses by default (a crotchet), so a plain `d : r : m : f` is
+four beats. A duration starts with `!` and is then extended: each `-` adds two
 pulses and each `.` adds one. So `d!` is two pulses, `d!.` is three, `d!-` is
 four, and `d!-.` is five. A leading `,` instead means one pulse and cannot be
 extended. Marks may be separated by spaces, but a comma must stay attached to
@@ -44,6 +47,31 @@ the top voice stays silent.
 
 A key change starts a new section, which is why the section header form exists:
 it is the only way to spell a tonic that is not one of the seven solfa letters.
+
+### Bars and groups
+
+A bar opens with a `|` on a line of its own, and **the beats inside it are
+separated one by one**: a `:` moves to the next beat of the same group, a `|`
+opens a new group. A bare space is not enough, because the short barlines of the
+engraving have to be written down:
+
+```
+|
+S: d : r | m : f
+A: r : m | f : s
+P: Ave : Ma | ri : a
+```
+
+The `:` is engraved as nothing and the `|` as a short barline, while the `|`
+that opens the bar becomes a full one. Every voice of a bar has to group its
+beats the same way, otherwise the staves would disagree, and the lyrics line
+follows the same separators.
+
+The time signature is engraved for information only. The beats are written out
+one by one, so `:time=` neither groups nor validates them: `4/4` with three
+beats is not an error, and `7/8` with four is not either. It is picked from a
+dropdown on the left of the score, under the title, next to the tonic, and it
+is undoable like any other edit.
 
 ### Voices and lyrics
 
@@ -56,14 +84,15 @@ the first line of the bar; the other lines must hold the same number of notes.
 | `S:` `A:` `T:` `B:` | a voice line, by its declared short name |
 | `P:` | the lyrics line (`Paroles`, `lyrics`, `words`, `text` also work) |
 | `_` | in the lyrics line, a beat with no new syllable |
-| bare `d r m f` | shorthand for the first declared voice |
+| bare `d : r : m : f` | shorthand for the first declared voice |
 
 A voice that does not sing a beat writes `0`; it repeats its own previous note
 with `~`. Both may also be used inside a bar, and `~` is what the serialiser
 writes when two neighbouring notes in a voice are equal.
 
-Lyrics syllables are matched to beats in order, and the counts must agree, so
-`P: Ave Ma ri a _ le nos` sets four syllables over seven beats. A declared part
+Lyrics syllables are matched to beats in order and separated like the notes,
+and the counts must agree, so `P: Ave : Ma : ri : a : _ : le : nos` sets four
+syllables over seven beats. A declared part
 whose short name collides with a lyrics alias (`P:`, for instance) wins: the
 parser prefers declared parts.
 
@@ -78,7 +107,9 @@ value runs to the end of the line, because a title is prose:
 ```
 
 The title is engraved once, centred above the first system, and the subtitle
-sits under it in italics. A score with neither reserves no space for them. Above
+sits under it in italics. On the left, under the heading, a key line shows the
+tonic with its alteration written out (`Do nat C`, `Fa dia F#`, `Si bem Bb`)
+followed by the time signature. A score with neither reserves no space for them. Above
 the engraving there is an input on the title itself and a `+ Sous-titre` button
 that reveals a second one, so the heading is typed straight onto the page; both
 write a directive into the text, which means undo works like everywhere else.
@@ -109,9 +140,11 @@ B: s' : l' | t' : d''
 P: Se : glori | fi : ca
 ```
 
-The engraving draws one row and one staff line per voice that actually sings in
-a section, so a four-part score stays compact when a part is resting, and the
-lyrics sit under the lowest voice of the section.
+The engraving draws one row per voice that actually sings in a section, so a
+four-part score stays compact when a part is resting, and the lyrics sit under
+the lowest voice of the section. There is no staff: the solfa letters are read
+directly, and the only lines drawn are the barline that opens and closes a bar
+and the short barlines that open a group.
 
 ## Architecture
 
@@ -126,8 +159,8 @@ apps/desktop    Tauri v2 shell (Windows, macOS, Linux, Android)
 a `Score` plus source `Span`s, `serialize` goes the other way, and `layout`
 turns a `Score` into a flat display list with hit regions. `SolfaDocument` is the
 only mutable object: every change is a command (`text/set`, `note/step`,
-`beat/setPulses`, `lyric/set`, `parts/set`, `history/undo`, ...), and observers
-re-render from its state.
+`beat/setPulses`, `lyric/set`, `parts/set`, `time/set`, `history/undo`, ...), and
+observers re-render from its state.
 
 Two details make the round trip stable:
 
@@ -164,7 +197,10 @@ or any wider edit stays its own step. The run window slides with the caret, whic
 is what lets the letters of a word coalesce even though each keystroke lands at a
 new offset; the key of the first edit is what the document compares against.
 
-The heading at the top of the engraving is editable in place, and the `+
+The tonic of the key line is engraved next to the time signature, which is
+picked from a dropdown: it is the one control in the margin, and it writes a
+`:time=` directive so the change is undoable and survives a reload. The heading
+at the top of the engraving is editable in place, and the `+
 Sous-titre` button next to it adds or removes the second line.
 
 Clicking a note in the engraving selects it. From there, the selection is edited
@@ -184,7 +220,7 @@ clicked, so bringing a voice back in is done in the text panel; the voice then
 picks up the pitch it sang just before, so a stray rest never scrambles the
 contour.
 
-A syllable is edited in place: click it under the staff, type, then press `Enter`
+A syllable is edited in place: click it under the notes, type, then press `Enter`
 or click away to confirm, or `Escape` to cancel. The toolbar's **Parole** button
 does the same for the selected note.
 
@@ -218,7 +254,7 @@ dependencies (`webkit2gtk-4.1` and `libgtk-3-dev` on Linux).
 - Keys, modes, accidentals, octave marks, pulse durations, sections, and
   multi-key scores parse, serialise round-trip, and lay out across systems.
 - User-definable voices with a shared rhythm, per-voice holds and rests, and a
-  lyrics line, parse, round-trip, and engrave one staff line per singing part.
+  lyrics line, parse, round-trip, and engrave one row per singing part.
 - Undo/redo, note id stability, and hit testing are covered by tests.
 - **Enregistrer** opens a dialog that exports the engraving as a PDF (A4, fitted)
   or a PNG, with a file name field. Exports omit the selection and hover
@@ -231,4 +267,5 @@ Not yet: audio playback, SMuFL/Bravura glyph fonts (engraving currently uses
 system serif fonts), rhythmic noteheads on the staff, clefs drawn on the staff,
 editing the rhythm from the score rather than the text, bringing a rest back
 from the canvas, file open/save through the Tauri filesystem dialogs, and canvas
-note editing by drag.
+note editing by drag. The time signature is engraved but does not yet check the
+number of beats written in a bar.
