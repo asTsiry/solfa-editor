@@ -43,7 +43,10 @@ const LYRIC_FONT = 'italic 13px ui-sans-serif, system-ui, sans-serif';
 
 function isLabelRole(role: GlyphRole): boolean {
   return (
-    role === 'section-label' || role === 'measure-number' || role === 'part-name'
+    role === 'section-label' ||
+    role === 'measure-number' ||
+    role === 'part-name' ||
+    role === 'key-line'
   );
 }
 
@@ -72,8 +75,8 @@ function paintItem(
 ): void {
   if (item.kind === 'line') {
     context.strokeStyle =
-      item.role === 'system-line' ? theme.muted : theme.bar;
-    context.lineWidth = item.role === 'system-line' ? 1 : item.width;
+      theme.bar;
+    context.lineWidth = item.width;
     context.beginPath();
     context.moveTo(item.x1, item.y1);
     context.lineTo(item.x2, item.y2);

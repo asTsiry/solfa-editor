@@ -108,6 +108,41 @@ export function keyLabel(key: Key): string {
   return `${formatPitchName(key.doPitch, key.doLetter)} ${key.mode}`;
 }
 
+// The fixed-do syllable of the tonic letter, used by the key line under the title.
+const LETTER_SYLLABLES: Readonly<Record<string, string>> = {
+  C: 'Do',
+  D: 'Ré',
+  E: 'Mi',
+  F: 'Fa',
+  G: 'Sol',
+  A: 'La',
+  B: 'Si',
+};
+
+export function tonicSyllable(key: Key): string {
+  return LETTER_SYLLABLES[key.doLetter] ?? 'Do';
+}
+
+// The alteration of the tonic against its own natural letter. The key line always
+// spells it out rather than leaving the tonic looking bare, so the reader can see
+// at a glance that the key is altered even when the letter suggests otherwise.
+export function tonicAccidentalWord(key: Key): string {
+  const natural = NATURAL_CLASS[key.doLetter];
+  if (natural === undefined) return 'nat';
+  const difference = mod12(key.doPitch) - natural;
+  if (difference === 1) return 'dia';
+  if (difference === -1) return 'bem';
+  return 'nat';
+}
+
+/** `Do nat C`, `Sol dia G#`, `La bem Bb`. */
+export function tonicLabel(key: Key): string {
+  return `${tonicSyllable(key)} ${tonicAccidentalWord(key)} ${formatPitchName(
+    key.doPitch,
+    key.doLetter,
+  )}`;
+}
+
 export type Spelling = {
   readonly letter: string;
   readonly accidental: Accidental;

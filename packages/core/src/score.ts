@@ -1,4 +1,5 @@
 import type { Accidental, Key } from './pitch.js';
+import { DEFAULT_TIME_SIGNATURE } from './meter.js';
 
 export type { Accidental, Key };
 
@@ -40,6 +41,12 @@ export type Measure = {
   readonly kind: 'measure';
   readonly id: string;
   readonly beats: readonly Beat[];
+  /**
+   * Indexes of the beats that open a new group inside the measure, that is the
+   * beats written after a `|` rather than after a `:`. The engraving draws a
+   * short barline in front of each of them.
+   */
+  readonly groupBreaks: readonly number[];
 };
 
 export type Section = {
@@ -53,6 +60,7 @@ export type Score = {
   readonly kind: 'score';
   readonly title: string | null;
   readonly subtitle: string | null;
+  readonly timeSignature: string;
   readonly parts: readonly Part[];
   readonly sections: readonly Section[];
 };

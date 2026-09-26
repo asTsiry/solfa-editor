@@ -5,7 +5,7 @@ import { DEFAULT_PARTS, voiceNotesOf, type PartId, type Score } from '../src/sco
 import { parse } from '../src/parse.js';
 import { sequentialIdFactory } from '../src/ids.js';
 
-const CHOIR = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t'].join('\n');
+const CHOIR = ['|', 'S: d : r : m : f', 'A: r : m : f : s', 'T: m : f : s : l', 'B: f : s : l : t'].join('\n');
 
 function notesOf(text: string, tag = 'a') {
   return voiceNotesOf(parse(text, { idFactory: sequentialIdFactory(tag) }).score);
@@ -34,24 +34,24 @@ function firstNoteOf(doc: SolfaDocument, partId: PartId, index = 0) {
 
 describe('reconcileIds', () => {
   it('keeps ids when nothing changed', () => {
-    const before = notesOf('|d r m', 'a');
-    const after = notesOf('|d r m', 'b');
+    const before = notesOf('|d : r : m', 'a');
+    const after = notesOf('|d : r : m', 'b');
     const mapping = reconcileIds(before, after);
     expect(mapping.carriedOver).toBe(3);
     expect([...mapping.oldToNew.values()].sort()).toEqual(after.map((note) => note.id).sort());
   });
 
   it('preserves ids for untouched notes when one is inserted', () => {
-    const before = notesOf('|d r m', 'a');
-    const after = notesOf('|d m r m', 'b');
+    const before = notesOf('|d : r : m', 'a');
+    const after = notesOf('|d : m : r : m', 'b');
     const mapping = reconcileIds(before, after);
     expect(mapping.oldToNew.get(before[0]!.id)).toBe(after[0]!.id);
     expect(mapping.oldToNew.get(before[2]!.id)).toBe(after[3]!.id);
   });
 
   it('drops ids for deleted notes', () => {
-    const before = notesOf('|d r m', 'a');
-    const after = notesOf('|d m', 'b');
+    const before = notesOf('|d : r : m', 'a');
+    const after = notesOf('|d : m', 'b');
     const mapping = reconcileIds(before, after);
     expect(mapping.carriedOver).toBe(2);
     expect(mapping.oldToNew.size).toBe(2);
@@ -74,7 +74,7 @@ describe('reconcileIds', () => {
 
 describe('SolfaDocument: parsing', () => {
   it('starts from parsed text', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const state = doc.getState();
     expect(state.valid).toBe(true);
     expect(voiceNotesOf(state.score)).toHaveLength(3);
@@ -87,8 +87,8 @@ describe('SolfaDocument: parsing', () => {
   });
 
   it('keeps the last good score when the text becomes invalid', () => {
-    const doc = new SolfaDocument('|d r m');
-    doc.dispatch({ type: 'text/set', text: '|d r %' });
+    const doc = new SolfaDocument('|d : r : m');
+    doc.dispatch({ type: 'text/set', text: '|d : r%' });
     const state = doc.getState();
     expect(state.valid).toBe(false);
     expect(state.errors.length).toBeGreaterThan(0);
@@ -96,9 +96,9 @@ describe('SolfaDocument: parsing', () => {
   });
 
   it('survives a round trip through invalid and back', () => {
-    const doc = new SolfaDocument("|d' r m");
+    const doc = new SolfaDocument("|d' : r : m");
     const original = doc.getState().text;
-    doc.dispatch({ type: 'text/set', text: '|d r %%%' });
+    doc.dispatch({ type: 'text/set', text: '|d : r%%%' });
     doc.dispatch({ type: 'text/set', text: original });
     const state = doc.getState();
     expect(state.valid).toBe(true);
@@ -108,10 +108,10 @@ describe('SolfaDocument: parsing', () => {
 
 describe('SolfaDocument: editing', () => {
   it('rewrites the text when a note is edited on the canvas', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const first = firstNoteOf(doc, 'soprano')!;
     doc.dispatch({ type: 'note/setDegree', noteId: first.id, degree: 4 });
-    expect(doc.getState().text).toBe('|\nS: s r m\n');
+    expect(doc.getState().text).toBe('|\nS: s : r : m\n');
   });
 
   it('edits only the voice that was clicked', () => {
@@ -123,14 +123,14 @@ describe('SolfaDocument: editing', () => {
   });
 
   it('keeps the edited note selected after a canvas edit', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const first = firstNoteOf(doc, 'soprano')!;
     doc.dispatch({ type: 'note/setDegree', noteId: first.id, degree: 4 });
     expect(doc.getState().selection.noteIds).toEqual([first.id]);
   });
 
   it('preserves surrounding note ids across a canvas edit', () => {
-    const doc = new SolfaDocument('|d r m f');
+    const doc = new SolfaDocument('|d : r : m : f');
     const before = voiceNotesOf(doc.getState().score);
     doc.dispatch({ type: 'note/setDegree', noteId: before[1]!.id, degree: 4 });
     const after = voiceNotesOf(doc.getState().score);
@@ -140,7 +140,7 @@ describe('SolfaDocument: editing', () => {
   });
 
   it('steps a note up and down by a degree', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const first = firstNoteOf(doc, 'soprano')!;
     doc.dispatch({ type: 'note/step', noteId: first.id, delta: 2 });
     expect(degreesOf(doc.getState().score)[0]).toBe(2);
@@ -149,7 +149,7 @@ describe('SolfaDocument: editing', () => {
   });
 
   it('changes an accidental', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const first = firstNoteOf(doc, 'soprano')!;
     doc.dispatch({ type: 'note/setAccidental', noteId: first.id, accidental: 1 });
     expect(doc.getState().text).toContain('d#');
@@ -160,7 +160,7 @@ describe('SolfaDocument: editing', () => {
     const alto = firstNoteOf(doc, 'alto')!;
     const beat = doc.beatOfNote(alto.id)!;
     doc.dispatch({ type: 'beat/setPulses', beatId: beat.id, pulses: 1 });
-    expect(doc.getState().text).toContain('S: d, r m f');
+    expect(doc.getState().text).toContain('S: d, : r : m : f');
   });
 
   it('sets and clears a syllable', () => {
@@ -174,10 +174,10 @@ describe('SolfaDocument: editing', () => {
   });
 
   it('keeps the selection alive when the edited note is deleted', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const notes = voiceNotesOf(doc.getState().score);
     doc.dispatch({ type: 'note/select', noteIds: [notes[1]!.id] });
-    doc.dispatch({ type: 'text/set', text: '|d m' });
+    doc.dispatch({ type: 'text/set', text: '|d : m'});
     expect(doc.getState().selection.noteIds).toEqual([]);
   });
 });
@@ -190,7 +190,7 @@ describe('SolfaDocument: rests', () => {
     doc.dispatch({ type: 'voice/setRest', beatId: beat.id, partId: 'alto', rest: true });
     expect(degreesOf(doc.getState().score, 'alto').slice(0, 2)).toEqual([null, 2]);
     expect(degreesOf(doc.getState().score, 'soprano').slice(0, 2)).toEqual([0, 1]);
-    expect(doc.getState().text).toContain('A: 0 m f s');
+    expect(doc.getState().text).toContain('A: 0 : m : f : s');
   });
 
   it('brings a rest back at the pitch the voice sang just before', () => {
@@ -232,10 +232,10 @@ describe('SolfaDocument: rests', () => {
     const beat = doc.beatOfNote(soprano.id)!;
     doc.dispatch({ type: 'beat/setPulses', beatId: beat.id, pulses: 3 });
     doc.dispatch({ type: 'voice/setRest', beatId: beat.id, partId: 'soprano', rest: true });
-    expect(doc.getState().text).toContain('S: 0!. r m f');
+    expect(doc.getState().text).toContain('S: 0!. : r : m : f');
     const again = doc.getState();
     expect(again.valid).toBe(true);
-    expect(again.text).toContain('S: 0!. r m f');
+    expect(again.text).toContain('S: 0!. : r : m : f');
   });
 
   it('drops the selection when the selected note becomes a rest', () => {
@@ -277,20 +277,20 @@ describe('SolfaDocument: rests', () => {
 
 describe('SolfaDocument: history', () => {
   it('undoes and redoes a canvas edit', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const first = firstNoteOf(doc, 'soprano')!;
     doc.dispatch({ type: 'note/setDegree', noteId: first.id, degree: 4 });
-    expect(doc.getState().text).toBe('|\nS: s r m\n');
+    expect(doc.getState().text).toBe('|\nS: s : r : m\n');
     doc.dispatch({ type: 'history/undo' });
-    expect(doc.getState().text).toBe('|d r m');
+    expect(doc.getState().text).toBe('|d : r : m');
     doc.dispatch({ type: 'history/redo' });
-    expect(doc.getState().text).toBe('|\nS: s r m\n');
+    expect(doc.getState().text).toBe('|\nS: s : r : m\n');
   });
 
   it('reports what it can undo and redo', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     expect(doc.getState().canUndo).toBe(false);
-    doc.dispatch({ type: 'text/set', text: '|d r m f' });
+    doc.dispatch({ type: 'text/set', text: '|d : r : m : f'});
     expect(doc.getState().canUndo).toBe(true);
     expect(doc.getState().canRedo).toBe(false);
     doc.dispatch({ type: 'history/undo' });
@@ -300,8 +300,8 @@ describe('SolfaDocument: history', () => {
 
   it('coalesces rapid typing into one undo step', () => {
     const doc = new SolfaDocument('|d');
-    doc.dispatch({ type: 'text/set', text: '|d r', coalesceKey: 'typing' });
-    doc.dispatch({ type: 'text/set', text: '|d r m', coalesceKey: 'typing' });
+    doc.dispatch({ type: 'text/set', text: '|d : r',coalesceKey: 'typing' });
+    doc.dispatch({ type: 'text/set', text: '|d : r : m',coalesceKey: 'typing' });
     doc.dispatch({ type: 'history/undo' });
     expect(doc.getState().text).toBe('|d');
   });

@@ -1,4 +1,5 @@
 import { defaultIdFactory, type IdFactory } from './ids.js';
+import { DEFAULT_TIME_SIGNATURE, parseTimeSignature } from './meter.js';
 import {
   DEFAULT_KEY,
   isLetter,
@@ -83,6 +84,9 @@ const LYRIC_ALIASES = new Set(['p', 'paroles', 'parole', 'lyrics', 'lyric', 'wor
 const TITLE_DIRECTIVES = new Set(['title', 'subtitle']);
 const CONTINUE = '_';
 const Rest = '0';
+const BEAT_SEPARATOR_HINT =
+  'The beats of a measure are separated by ":" inside a group and "|" between groups';
+const GROUP_HINT = 'Every voice of a measure groups its beats the same way';
 
 export type ParseOptions = {
   readonly idFactory?: IdFactory;
@@ -105,6 +109,7 @@ type MutableMeasure = {
   kind: 'measure';
   id: string;
   beats: MutableBeat[];
+  groupBreaks: number[];
   lyricCount: number;
   lyricFrom: number;
   lyricTo: number;
@@ -489,6 +494,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
   let parts: Part[] = [...DEFAULT_PARTS];
   let title: string | null = null;
   let subtitle: string | null = null;
+  let timeSignature: string = DEFAULT_TIME_SIGNATURE;
   const setText = (field: 'title' | 'subtitle', value: string | null): void => {
     if (field === 'title') title = value;
     else subtitle = value;
@@ -496,6 +502,8 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
   let currentKey: Key = { ...DEFAULT_KEY };
   let currentMeasures: MutableMeasure[] = [];
   let currentBeats: MutableBeat[] = [];
+  let groupBreaks: number[] = [];
+  let groupBreaksFrom: number | null = null;
   let measureOpen = false;
   let lyricCount = 0;
   let lyricFrom = -1;
@@ -538,7 +546,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
     return null;
   };
 
-  const runVoiceLine = (rawLabel: string, labelAt: number): void => {
+  const runVoiceLine = (rawLabel: string, labelAt: number, lineAt: number): void => {
     const partIndex = partIndexFor(parts, rawLabel);
     if (partIndex < 0) {
       parser.error(
@@ -560,10 +568,28 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
     const carriesRhythm = partIndex === 0;
     let previous: VoiceNote | null = null;
     let index = 0;
+    const localBreaks: number[] = [];
 
     for (;;) {
-      parser.skipInlineSpace();
-      if (parser.atLineEnd()) break;
+      // Between two beats the meter has to be spelled out: `:` inside a group and
+      // `|` between groups. A bare space is not enough, otherwise the short
+      // barlines of the engraving would have nothing to follow.
+      if (index > 0) {
+        parser.skipInlineSpace();
+        if (parser.atLineEnd()) break;
+        const separator = parser.peek();
+        if (separator === Ch.Colon || separator === Ch.Pipe) {
+          parser.advance();
+          if (separator === Ch.Pipe) localBreaks.push(index);
+          parser.skipInlineSpace();
+          if (parser.atLineEnd()) break;
+        } else {
+          parser.error(BEAT_SEPARATOR_HINT, parser.pos, parser.pos + 1);
+        }
+      } else {
+        parser.skipInlineSpace();
+        if (parser.atLineEnd()) break;
+      }
 
       const code = parser.peek();
       const isNoteStart =
@@ -636,6 +662,8 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
         );
       }
     }
+
+    adoptGroupBreaks(localBreaks, lineAt);
   };
 
   const runLyricLine = (): void => {
@@ -645,8 +673,24 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
     }
     let lyricIndex = 0;
     for (;;) {
-      parser.skipInlineSpace();
-      if (parser.atLineEnd()) break;
+      // The syllables follow the same separators as the beats, so a syllable can
+      // always be lined up with the note it belongs to.
+      if (lyricIndex > 0) {
+        parser.skipInlineSpace();
+        if (parser.atLineEnd()) break;
+        const separator = parser.peek();
+        if (separator === Ch.Colon || separator === Ch.Pipe) {
+          parser.advance();
+          parser.skipInlineSpace();
+          if (parser.atLineEnd()) break;
+        } else {
+          parser.error(BEAT_SEPARATOR_HINT, parser.pos, parser.pos + 1);
+        }
+      } else {
+        parser.skipInlineSpace();
+        if (parser.atLineEnd()) break;
+      }
+
       const code = parser.peek();
       if (code === Ch.Pipe || code === Ch.Colon) break;
 
@@ -663,6 +707,27 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       }
     }
   };
+
+  // The first voice line of a measure decides where the groups start; the others
+  // have to agree, otherwise the short barlines would disagree between the staves.
+  const adoptGroupBreaks = (breaks: readonly number[], at: number): void => {
+    if (groupBreaksFrom === null) {
+      groupBreaks = [...breaks];
+      groupBreaksFrom = at;
+      return;
+    }
+    if (breaks.length === groupBreaks.length && breaks.every((value, i) => value === groupBreaks[i])) {
+      return;
+    }
+    parser.error(
+      `${GROUP_HINT}: this voice groups after ${describeBreaks(breaks)} but the measure groups after ${describeBreaks(groupBreaks)}`,
+      at,
+      at + 1,
+    );
+  };
+
+  const describeBreaks = (breaks: readonly number[]): string =>
+    breaks.length === 0 ? 'every beat' : `beat${breaks.length === 1 ? '' : 's'} ${breaks.join(', ')}`;
 
   const flushMeasure = (): void => {
     if (currentBeats.length === 0) {
@@ -682,11 +747,14 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       kind: 'measure',
       id: nextId(),
       beats: currentBeats,
+      groupBreaks,
       lyricCount,
       lyricFrom,
       lyricTo,
     });
     currentBeats = [];
+    groupBreaks = [];
+    groupBreaksFrom = null;
     measureOpen = false;
     lyricCount = 0;
   };
@@ -739,6 +807,18 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       if (value === 'major' || value === 'M') setKey({ mode: 'major' });
       else if (value === 'minor' || value === 'm') setKey({ mode: 'minor' });
       else parser.error(`":mode" expects major or minor, found "${value}"`, at);
+      return;
+    }
+    if (name === 'time' || name === 'meter') {
+      const parsed = parseTimeSignature(value);
+      if (parsed === null) {
+        parser.error(
+          `":${name}" expects a time signature such as 4/4, 3/4, 6/8 or C, found "${value}"`,
+          at,
+        );
+        return;
+      }
+      timeSignature = value;
       return;
     }
     if (TITLE_DIRECTIVES.has(name)) {
@@ -807,7 +887,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       parser.advance();
       const partIndex = partIndexFor(parts, word);
       if (partIndex >= 0 || !LYRIC_ALIASES.has(word.toLowerCase())) {
-        runVoiceLine(word, start);
+        runVoiceLine(word, start, wordStart);
       } else {
         runLyricLine();
       }
@@ -819,7 +899,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       code === Ch.Quote || code === Ch.Comma || code === Ch.LowerB || isLetter(parser.ch());
     if (bare) {
       const first = parts[0];
-      if (first) runVoiceLine(first.shortName, start);
+      if (first) runVoiceLine(first.shortName, start, start);
       else parser.error('No voices are declared; add a ":parts=..." directive', start);
       continue;
     }
@@ -834,6 +914,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
     kind: 'score',
     title,
     subtitle,
+    timeSignature,
     parts,
     sections: sections.map(
       (section): Section => ({
@@ -844,6 +925,7 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
           (measure): Measure => ({
             kind: 'measure',
             id: measure.id,
+            groupBreaks: measure.groupBreaks,
             beats: measure.beats.map(
               (beat): Beat => ({
                 kind: 'beat',

@@ -228,17 +228,17 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
 :subtitle=pour chœur à quatre voix
 :parts=Soprano:S:treble,Alto:A:alto,Tenor:T:treble8vb,Bass:B:bass
 |
-S: d! r m f s l t
-A: 0 m f s l t d'
-T: m f s l t d' r'
-B: f s l t d' r' m
-P: Ave Ma ri a _ le nos
+S: d! : r : m : f : s : l : t
+A: 0 : m : f : s : l : t : d'
+T: m : f : s : l : t : d' r'
+B: f : s : l : t : d' r' m
+P: Ave : Ma : ri : a : _ : le : nos
 |1:
 S: d' r' m' f' s' l' t'
 A: m' f' s' l' t' d''
 T: f' s' l' t' d'' r''
 B: s' l' t' d'' r'' m''
-P: Se_ glori fi ca ve unt`}</pre>
+P: Se_ : glori : fi : ca : ve : unt`}</pre>
         <p>
           Ici la première voix porte les durées : <code>d!</code> vaut 3 temps et
           les notes suivantes 2. L&apos;alto se tait au premier temps

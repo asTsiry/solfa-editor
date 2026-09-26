@@ -1,9 +1,11 @@
 import {
+  DEFAULT_KEY,
   DEFAULT_LAYOUT,
   describeVoiceNote,
   layout,
   textBox,
   lyricGlyphOf,
+  tonicLabel,
   type LayoutOptions,
   type SolfaDocument,
   type VoiceNote,
@@ -12,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { SolfaCanvas, SolfaText } from './SolfaSurfaces.js';
 import { LyricEditor, type LyricEditorTarget } from './LyricEditor.js';
+import { KeyLine, type KeyLineSlot } from './KeyLine.js';
 import { TitleBlock, type HeadingSlot } from './TitleBlock.js';
 import { NoteToolbar } from './NoteToolbar.js';
 import { createSolfaDocument, useSolfaDocument } from './state/useSolfaDocument.js';
@@ -129,7 +132,23 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
     };
 
     const top = DEFAULT_LAYOUT.topMargin;
+    const keyLineSlot: KeyLineSlot = ((): KeyLineSlot => {
+      for (const item of laid.items) {
+        if (item.kind === 'glyph' && item.role === 'key-line') {
+          const box = textBox(item);
+          return { x: box.left, y: box.centerY, fontSize: item.fontSize };
+        }
+      }
+      const y =
+        top +
+        (state.score.title === null ? 0 : DEFAULT_LAYOUT.titleFontSize + 10) +
+        (state.score.subtitle === null ? 0 : DEFAULT_LAYOUT.subtitleFontSize + 12) +
+        DEFAULT_LAYOUT.keyLineFontSize / 2;
+      return { x: DEFAULT_LAYOUT.leftMargin, y, fontSize: DEFAULT_LAYOUT.keyLineFontSize };
+    })();
+
     return {
+      keyLineSlot,
       titleSlot: slotOf('title', top + DEFAULT_LAYOUT.titleFontSize / 2),
       subtitleSlot: slotOf(
         'subtitle',
@@ -155,6 +174,12 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
             theme={props.theme}
             onSelectNote={handleSelectNote}
             onSelectLyric={setLyricTarget}
+          />
+          <KeyLine
+            document={document}
+            tonic={tonicLabel(state.score.sections[0]?.key ?? DEFAULT_KEY)}
+            timeSignature={state.score.timeSignature}
+            slot={headingSlots.keyLineSlot}
           />
           <TitleBlock
             document={document}

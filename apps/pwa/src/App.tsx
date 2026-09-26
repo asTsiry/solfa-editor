@@ -11,11 +11,11 @@ export const SAMPLE = `// Chœur à quatre voix : do = do
 :title=Ave Maria
 :subtitle=pour chœur à quatre voix
 |
-S: d r m f s l t
-A: r m f s l t d'
-T: m f s l t d' r'
-B: f s l t d' r' m
-P: do re mi fa sol la si
+S: d : r : m : f : s : l : t
+A: r : m : f : s : l : t : d'
+T: m : f : s : l : t : d' r'
+B: f : s : l : t : d' r' m
+P: do : re : mi : fa : sol : la : si
 
 |1:
 S: d' r' m' f' s' l' t'

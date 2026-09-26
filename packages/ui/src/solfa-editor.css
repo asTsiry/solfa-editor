@@ -392,6 +392,48 @@
   font-size: 12px;
 }
 
+.solfa-key-line {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  transform: translateY(-50%);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--solfa-muted);
+  font-family: var(--solfa-serif);
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  pointer-events: auto;
+}
+
+.solfa-key-line-tonic,
+.solfa-key-line-separator {
+  pointer-events: none;
+}
+
+.solfa-key-line-time {
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant: small-caps;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.solfa-key-line-time:hover {
+  border-color: var(--solfa-muted);
+}
+
+.solfa-key-line-time:focus {
+  outline: none;
+  border-color: var(--solfa-accent);
+  background: var(--solfa-surface);
+}
+
 .solfa-heading {
   position: absolute;
   inset: 0;

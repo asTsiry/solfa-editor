@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_SIGNATURE, normalizeTimeSignature } from './meter.js';
 import { reconcileScore } from './reconcile.js';
 import { parse } from './parse.js';
 import { serialize } from './serialize.js';
@@ -60,6 +61,7 @@ export type Command =
   | { readonly type: 'note/step'; readonly noteId: string; readonly delta: number }
   | { readonly type: 'title/set'; readonly field: 'title' | 'subtitle'; readonly value: string | null }
   | { readonly type: 'key/set'; readonly key: Key }
+  | { readonly type: 'time/set'; readonly value: string }
   | { readonly type: 'parts/set'; readonly parts: Score['parts'] }
   | { readonly type: 'history/undo' }
   | { readonly type: 'history/redo' };
@@ -72,6 +74,7 @@ const EMPTY_SCORE: Score = {
   kind: 'score',
   title: null,
   subtitle: null,
+  timeSignature: DEFAULT_TIME_SIGNATURE,
   parts: DEFAULT_PARTS,
   sections: [],
 };
@@ -237,6 +240,12 @@ export class SolfaDocument {
         if (state.score[command.field] === value) return state;
         const score: Score = { ...state.score, [command.field]: value };
         return this.commitScore(score);
+      }
+
+      case 'time/set': {
+        const value = normalizeTimeSignature(command.value);
+        if (state.score.timeSignature === value) return state;
+        return this.commitScore({ ...state.score, timeSignature: value });
       }
 
       case 'key/set': {

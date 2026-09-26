@@ -92,20 +92,21 @@ directive is only written when the set is not the default one.
 
 ```
 // Chœur à quatre voix
-:do=C
+:title=Ave Maria
+:time=4/4
 :parts=Soprano:S:treble,Alto:A:alto,Tenor:T:treble8vb,Bass:B:bass
 |
-S: d! r m f s l t
-A: 0 m f s l t d'
-T: m f s l t d' r'
-B: f s l t d' r' m
-P: Ave Ma ri a _ le nos
+S: d : r | m : f
+A: r : m | f : s
+T: m : f | s : l
+B: f : s | l : t
+P: Ave : Ma | ri : a
 |1:
-S: d' r' m' f' s' l' t'
-A: m' f' s' l' t' d''
-T: f' s' l' t' d'' r''
-B: s' l' t' d'' r'' m''
-P: Se_ glori fi ca ve unt
+S: d' : r' | m' : f'
+A: m' : f' | s' : l'
+T: f' : s' | l' : t'
+B: s' : l' | t' : d''
+P: Se : glori | fi : ca
 ```
 
 The engraving draws one row and one staff line per voice that actually sings in

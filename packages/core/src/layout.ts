@@ -1,4 +1,4 @@
-import { LETTERS, keyLabel, octaveOf, pulseMarks } from './pitch.js';
+import { DEFAULT_KEY, LETTERS, keyLabel, octaveOf, pulseMarks, tonicLabel } from './pitch.js';
 import type { Beat, Measure, Part, Score, Section, Span, VoiceNote } from './score.js';
 
 export type GlyphRole =
@@ -11,7 +11,8 @@ export type GlyphRole =
   | 'lyric'
   | 'measure-number'
   | 'title'
-  | 'subtitle';
+  | 'subtitle'
+  | 'key-line';
 
 export type DisplayGlyph = {
   readonly kind: 'glyph';
@@ -28,7 +29,7 @@ export type DisplayGlyph = {
 
 export type DisplayLine = {
   readonly kind: 'line';
-  readonly role: 'barline' | 'system-line' | 'pulse-tick';
+  readonly role: 'barline' | 'group-barline';
   readonly x1: number;
   readonly y1: number;
   readonly x2: number;
@@ -90,6 +91,7 @@ export type LayoutOptions = {
   readonly lyricFontSize: number;
   readonly titleFontSize: number;
   readonly subtitleFontSize: number;
+  readonly keyLineFontSize: number;
 };
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
@@ -108,9 +110,13 @@ export const DEFAULT_LAYOUT: LayoutOptions = {
   lyricFontSize: 13,
   titleFontSize: 26,
   subtitleFontSize: 15,
+  keyLineFontSize: 15,
 };
 
 const BAR_PADDING = 14;
+
+// Room for the key line, which is always engraved even when there is no title.
+const KEY_LINE_HEIGHT = 30;
 
 function pulseMarkCount(pulses: number): number {
   return pulseMarks(pulses).length;
@@ -195,7 +201,8 @@ export function layout(
   // than on the system, so it is drawn once before any system is opened.
   const titleBlockHeight =
     (score.title === null ? 0 : options.titleFontSize + 10) +
-    (score.subtitle === null ? 0 : options.subtitleFontSize + 12);
+    (score.subtitle === null ? 0 : options.subtitleFontSize + 12) +
+    KEY_LINE_HEIGHT;
 
   let y = options.topMargin + titleBlockHeight;
   let x = options.leftMargin;
@@ -225,6 +232,25 @@ export function layout(
   const textWidth = (text: string, fontSize: number): number => text.length * fontSize * 0.55;
 
   const openTitleBlock = (): void => {
+    const firstKey = score.sections[0]?.key ?? DEFAULT_KEY;
+    const keyLine = `${tonicLabel(firstKey)}, ${score.timeSignature}`;
+    items.push({
+      kind: 'glyph',
+      role: 'key-line',
+      code: keyLine,
+      x: options.leftMargin,
+      y:
+        options.topMargin +
+        (score.title === null ? 0 : options.titleFontSize + 10) +
+        (score.subtitle === null ? 0 : options.subtitleFontSize + 12) +
+        options.keyLineFontSize,
+      width: textWidth(keyLine, options.keyLineFontSize),
+      height: options.keyLineFontSize + 4,
+      fontSize: options.keyLineFontSize,
+      noteId: null,
+      beatId: null,
+    });
+
     if (score.title !== null) {
       items.push({
         kind: 'glyph',
@@ -286,6 +312,7 @@ export function layout(
     });
     x += 6;
 
+    const breaks = new Set(pending.measure.groupBreaks);
     pending.measure.beats.forEach((beat, beatIndex) => {
       const beatLeft = x;
       const accidentalWidth = beatAccidentalWidth(beat, pending.rows, options);
@@ -294,15 +321,22 @@ export function layout(
       const width = accidentalWidth + options.cellWidth + marksWidth;
 
       if (beatIndex > 0) {
-        items.push({
-          kind: 'line',
-          role: 'pulse-tick',
-          x1: beatLeft,
-          y1: top - 4,
-          x2: beatLeft,
-          y2: top + stackHeight,
-          width: 0.5,
-        });
+        // A `|` in the text opens a new group, so it gets a short barline across
+        // the middle of the voices rather than the full height of the stack. The
+        // `:` separators are read but not engraved: the letters carry the rhythm.
+        if (breaks.has(beatIndex)) {
+          const groupHeight = stackHeight * 0.45;
+          const groupTop = top + (stackHeight - groupHeight) / 2;
+          items.push({
+            kind: 'line',
+            role: 'group-barline',
+            x1: beatLeft,
+            y1: groupTop,
+            x2: beatLeft,
+            y2: groupTop + groupHeight,
+            width: 1,
+          });
+        }
       }
 
       for (const partIndex of pending.rows) {
@@ -497,21 +531,6 @@ export function layout(
       });
     }
   });
-
-  for (const [, record] of [...systems].sort((a, b) => a[0] - b[0])) {
-    for (let rowIndex = 0; rowIndex < record.rows.length; rowIndex += 1) {
-      const baseline = record.top + rowIndex * voiceRowHeight + options.noteHeight + 6;
-      items.push({
-        kind: 'line',
-        role: 'system-line',
-        x1: options.leftMargin + record.gutter,
-        y1: baseline,
-        x2: options.systemWidth,
-        y2: baseline,
-        width: 1,
-      });
-    }
-  }
 
   const last = [...systems.values()].pop();
   const height = last ? last.top + rowsHeight(last) + options.topMargin : options.topMargin;

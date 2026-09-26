@@ -1,4 +1,5 @@
 import { defaultIdFactory, type IdFactory } from './ids.js';
+import { DEFAULT_TIME_SIGNATURE } from './meter.js';
 import {
   DEFAULT_KEY,
   LETTERS,
@@ -108,6 +109,9 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
 
   if (score.title !== null) write(`:title=${score.title}\n`);
   if (score.subtitle !== null) write(`:subtitle=${score.subtitle}\n`);
+  if (score.timeSignature !== DEFAULT_TIME_SIGNATURE) {
+    write(`:time=${score.timeSignature}\n`);
+  }
   if (first && !keysEqual(first.key, DEFAULT_KEY)) {
     for (const line of keyDirectives(first.key)) write(`${line}\n`);
   }
@@ -121,6 +125,12 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
 
     if (needsBarline) write('|\n');
 
+    const breaks = new Set(measure.groupBreaks);
+    // `:` between two beats of a group, `|` in front of a beat that opens one.
+    const separatorFor = (beatIndex: number): string => {
+      if (beatIndex === 0) return '';
+      return breaks.has(beatIndex) ? ' | ' : ' : ';
+    };
     const order = active.includes(0) ? active : [0, ...active];
     for (const partIndex of order) {
       const part = parts[partIndex];
@@ -129,19 +139,21 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
 
       const chunks: string[] = [];
       let previous: VoiceNote | null = null;
-      for (const beat of measure.beats) {
+      for (const [beatIndex, beat] of measure.beats.entries()) {
         const note = beat.notes[partIndex] ?? null;
         if (note === null) {
-          chunks.push(rhythmLine ? `${REST}${durationToText(beat.pulses)}` : REST);
+          chunks.push(`${separatorFor(beatIndex)}${rhythmLine ? `${REST}${durationToText(beat.pulses)}` : REST}`);
           previous = null;
           continue;
         }
         if (!rhythmLine && samePitch(previous, note)) {
-          chunks.push(HOLD);
+          chunks.push(`${separatorFor(beatIndex)}${HOLD}`);
           previous = note;
           continue;
         }
-        chunks.push(`${noteToText(note)}${rhythmLine ? durationToText(beat.pulses) : ''}`);
+        chunks.push(
+          `${separatorFor(beatIndex)}${noteToText(note)}${rhythmLine ? durationToText(beat.pulses) : ''}`,
+        );
         previous = note;
       }
 
@@ -152,7 +164,9 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
 
     if (hasLyrics(measure)) {
       const syllables = measureLyrics(measure);
-      const line = `${LYRIC_LABEL}: ${syllables.join(' ')}\n`;
+      const line = `${LYRIC_LABEL}: ${syllables
+        .map((syllable, index) => `${separatorFor(index)}${syllable}`)
+        .join('')}\n`;
       write(line);
     }
   };

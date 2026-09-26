@@ -1,4 +1,5 @@
 export * from './pitch.js';
+export * from './meter.js';
 export * from './score.js';
 export * from './parse.js';
 export * from './serialize.js';

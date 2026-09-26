@@ -27,7 +27,7 @@ function screenDownButton(): HTMLButtonElement {
 
 afterEach(cleanup);
 
-const CHOIR = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t', 'P: do re mi fa'].join('\n');
+const CHOIR = ['|', 'S: d : r : m : f', 'A: r : m : f : s', 'T: m : f : s : l', 'B: f : s : l : t', 'P: do : re : mi : fa'].join('\n');
 
 function Harness(props: { readonly document: SolfaDocument }): JSX.Element {
   return <SolfaEditor document={props.document} />;
@@ -58,7 +58,7 @@ function noteOf(doc: SolfaDocument, partId: string, index = 0) {
 
 describe('SolfaEditor', () => {
   it('renders both a canvas and a text surface', () => {
-    const doc = new SolfaDocument('|d r m');
+    const doc = new SolfaDocument('|d : r : m');
     const { container } = render(<Harness document={doc} />);
     expect(container.querySelector('canvas')).not.toBeNull();
     expect(container.querySelector('.cm-editor')).not.toBeNull();
@@ -89,8 +89,8 @@ describe('SolfaEditor', () => {
 
     doc.dispatch({ type: 'note/step', noteId: noteOf(doc, 'alto', 3)!.id, delta: 1 });
 
-    await waitFor(() => expect(doc.getState().text).toContain('A: r m f l'));
-    await waitFor(() => expect(editorText()).toContain('A: r m f l'));
+    await waitFor(() => expect(doc.getState().text).toContain('A: r : m : f : l'));
+    await waitFor(() => expect(editorText()).toContain('A: r : m : f : l'));
   });
 
   it('leaves the other voices untouched when one note moves', async () => {
@@ -100,10 +100,10 @@ describe('SolfaEditor', () => {
     doc.dispatch({ type: 'note/step', noteId: noteOf(doc, 'bass', 3)!.id, delta: 1 });
 
     const text = doc.getState().text;
-    expect(text).toContain('S: d r m f');
-    expect(text).toContain('A: r m f s');
-    expect(text).toContain('T: m f s l');
-    expect(text).toContain('B: f s l d');
+    expect(text).toContain('S: d : r : m : f');
+    expect(text).toContain('A: r : m : f : s');
+    expect(text).toContain('T: m : f : s : l');
+    expect(text).toContain('B: f : s : l : d');
   });
 
   it('does not add undo entries when syncing graphical edits into the text surface', () => {
@@ -121,7 +121,7 @@ describe('SolfaEditor', () => {
   it('applies a text command to every voice at once', () => {
     const doc = new SolfaDocument(CHOIR);
     render(<Harness document={doc} />);
-    doc.dispatch({ type: 'text/set', text: '|\nS: f s l t\nA: s l t d\nT: l t d r\nB: t d r m' });
+    doc.dispatch({ type: 'text/set', text: '|\nS: f : s : l : t\nA: s : l : t : d\nT: l : t : d : r\nB: t : d : r : m' });
     const score = doc.getState().score;
     const degrees = score.sections[0]!.measures[0]!.beats.map((beat) => beat.notes[0]!.degree);
     expect(degrees).toEqual([3, 4, 5, 6]);
@@ -139,8 +139,8 @@ describe('SolfaEditor', () => {
   it('pushes an external text change into the editor', async () => {
     const doc = new SolfaDocument(CHOIR);
     render(<Harness document={doc} />);
-    doc.dispatch({ type: 'text/set', text: '|\nS: s l t d\nA: l t d r\nT: t d r m\nB: d r m f' });
-    await waitFor(() => expect(editorText()).toContain('S: s l t d'));
+    doc.dispatch({ type: 'text/set', text: '|\nS: s : l : t : d\nA: l : t : d : r\nT: t : d : r : m\nB: d : r : m : f' });
+    await waitFor(() => expect(editorText()).toContain('S: s : l : t : d'));
   });
 });
 
@@ -168,7 +168,7 @@ describe('SolfaEditor: note controls', () => {
     selectNote(doc, 'alto');
     fireEvent.click(screenUpButton());
     expect(degreeOf(doc, 'alto')).toBe(2);
-    expect(doc.getState().text).toContain('A: m ~ f s');
+    expect(doc.getState().text).toContain('A: m : ~ : f : s');
   });
 
   it('lowers the selected note with the down button', () => {
@@ -178,7 +178,7 @@ describe('SolfaEditor: note controls', () => {
     selectNote(doc, 'alto');
     fireEvent.click(screenDownButton());
     expect(degreeOf(doc, 'alto')).toBe(0);
-    expect(doc.getState().text).toContain('A: d m f s');
+    expect(doc.getState().text).toContain('A: d : m : f : s');
   });
 
   it('shifts the selected note by an octave', () => {
@@ -197,7 +197,7 @@ describe('SolfaEditor: note controls', () => {
     fireEvent.click(screenButtonByTitle('Rendre cette note dièse'));
     expect(doc.getState().text).toContain('T: m# f s l');
     fireEvent.click(screenButtonByTitle('Enlever l’altération'));
-    expect(doc.getState().text).toContain('T: m f s l');
+    expect(doc.getState().text).toContain('T: m : f : s : l');
   });
 
   it('silences the selected voice on that beat', () => {
@@ -205,7 +205,7 @@ describe('SolfaEditor: note controls', () => {
     render(<Harness document={doc} />);
     selectNote(doc, 'bass', 1);
     fireEvent.click(screenButtonByTitle('Faire taire cette voix'));
-    expect(doc.getState().text).toContain('B: f 0 l t');
+    expect(doc.getState().text).toContain('B: f : 0 : l : t');
     expect(degreeOf(doc, 'alto', 1)).toBe(2);
   });
 
@@ -223,7 +223,7 @@ describe('SolfaEditor: note controls', () => {
     render(<Harness document={doc} />);
     selectNote(doc, 'soprano', 0);
     fireEvent.click(screenButtonByTitle('Faire taire cette voix'));
-    expect(doc.getState().text).toContain('S: 0 r m f');
+    expect(doc.getState().text).toContain('S: 0 : r : m : f');
     expect(doc.getState().valid).toBe(true);
   });
 
@@ -265,7 +265,7 @@ describe('SolfaEditor: note controls', () => {
   });
 
   it('adds a syllable to a beat that has none by clicking the empty slot', () => {
-    const doc = new SolfaDocument(['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t', 'P: do _ _ _'].join('\n'));
+    const doc = new SolfaDocument(['|', 'S: d : r : m : f', 'A: r : m : f : s', 'T: m : f : s : l', 'B: f : s : l : t', 'P: do : _ : _ : _'].join('\n'));
     render(<Harness document={doc} />);
     const laid = layout(doc.getState().score, doc.getState().spans, DEFAULT_LAYOUT);
     const slot = laid.items.find(
@@ -280,7 +280,7 @@ describe('SolfaEditor: note controls', () => {
     fireEvent.change(input, { target: { value: 'la' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(doc.getState().text).toContain('P: do la _ _');
+    expect(doc.getState().text).toContain('P: do : la : _ : _');
   });
 
   it('types the title into the heading and keeps it in the text', () => {
@@ -417,7 +417,7 @@ describe('SolfaEditor: note controls', () => {
     fireEvent.click(screenButtonByTitle('Faire alterner'));
     expect(doc.getState().text).toContain('T: mb f s l');
     fireEvent.click(screenButtonByTitle('Faire alterner'));
-    expect(doc.getState().text).toContain('T: m f s l');
+    expect(doc.getState().text).toContain('T: m : f : s : l');
   });
 
   it('moves the selected note with the arrow keys', () => {
@@ -480,7 +480,7 @@ describe('SolfaEditor: lyrics', () => {
     fireEvent.change(input, { target: { value: 'Ma' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    await waitFor(() => expect(doc.getState().text).toContain('P: do Ma mi fa'));
+    await waitFor(() => expect(doc.getState().text).toContain('P: do : Ma : mi : fa'));
   });
 
   it('confirms on blur', async () => {
@@ -496,7 +496,7 @@ describe('SolfaEditor: lyrics', () => {
     fireEvent.change(input, { target: { value: 'Ma' } });
     fireEvent.blur(input);
 
-    await waitFor(() => expect(doc.getState().text).toContain('P: do Ma mi fa'));
+    await waitFor(() => expect(doc.getState().text).toContain('P: do : Ma : mi : fa'));
   });
 
   it('discards the edit on escape', async () => {
@@ -529,6 +529,6 @@ describe('SolfaEditor: lyrics', () => {
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    await waitFor(() => expect(doc.getState().text).toContain('P: _ re mi fa'));
+    await waitFor(() => expect(doc.getState().text).toContain('P: _ : re : mi : fa'));
   });
 });
