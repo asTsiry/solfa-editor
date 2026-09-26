@@ -157,7 +157,7 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
         previous = note;
       }
 
-      const line = `${part.shortName}: ${chunks.join(' ')}\n`;
+      const line = `${part.shortName}: ${chunks.join('')}\n`;
       const from = write(line);
       trackSpans(spans, measure, partIndex, from, line);
     }

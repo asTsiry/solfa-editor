@@ -77,7 +77,7 @@ describe('parse: single voice', () => {
   });
 
   it('reads per note accidentals', () => {
-    const { score, errors } = stable('|d : r# mb');
+    const { score, errors } = stable('|d : r# : mb');
     expect(errors).toHaveLength(0);
     expect(voiceNotesOf(score).map((note) => note.accidental)).toEqual([0, 1, -1]);
   });
@@ -221,7 +221,7 @@ describe('parse: lyrics', () => {
 
   it('accepts paroles, lyrics and words as labels', () => {
     for (const label of ['P', 'Paroles', 'lyrics', 'words']) {
-      const { score, errors } = stable(['|', 'S: d : r', `${label}: la li`].join('\n'));
+      const { score, errors } = stable(['|', 'S: d : r', `${label}: la : li`].join('\n'));
       expect(errors, label).toHaveLength(0);
       expect(lyricsOf(score), label).toEqual(['la', 'li']);
     }
@@ -321,10 +321,10 @@ describe('serialize', () => {
       'B: f : s : l : t',
       'P: Ave : Ma : ri : a',
       '|',
-      'S: d\' r\' m\' f\'',
+      'S: d\' : r\' : m\' : f\'',
       'A: m : f : s : l',
       'T: s : l : t : d\'',
-      'B: l : t : d\' r\'',
+      'B: l : t : d\' : r\'',
       'P: ma : ri : a : ben',
     ].join('\n');
 
@@ -360,7 +360,7 @@ describe('serialize', () => {
     ['!--.', 7],
     ['!---', 8],
   ])('round trips the duration written as %j', (marks, pulses) => {
-    const { score, errors } = stable(['|', `S: d${marks} r`].join('\n'));
+    const { score, errors } = stable(['|', `S: d${marks} : r`].join('\n'));
     expect(errors, marks).toHaveLength(0);
     expect(pulseOf(score)).toEqual([pulses, 2]);
 
@@ -371,12 +371,12 @@ describe('serialize', () => {
   });
 
   it('writes a silent first voice so the rhythm has a home', () => {
-    const source = [':parts=Descant:D:treble,Chorus:C:treble', '|', 'D: 0!. : 0', 'C: d r'].join('\n');
+    const source = [':parts=Descant:D:treble,Chorus:C:treble', '|', 'D: 0!. : 0', 'C: d : r'].join('\n');
     const { score, errors } = stable(source);
     expect(errors).toHaveLength(0);
     const text = serialize(score).text;
     expect(text).toContain('D: 0!. : 0');
-    expect(text).toContain('C: d r');
+    expect(text).toContain('C: d : r');
     const again = parse(text);
     expect(again.errors).toHaveLength(0);
     expect(pulseOf(again.score)).toEqual([3, 2]);
@@ -444,7 +444,7 @@ describe('serialize', () => {
     if (!note || !bass) return;
     const key = score.sections[0]!.key;
     expect(describeVoiceNote(score, bass, note)).toBe(
-      `Bass: F : major ${spellToString(spellNote(key, note))}`,
+      `Bass: F major ${spellToString(spellNote(key, note))}`,
     );
   });
 });

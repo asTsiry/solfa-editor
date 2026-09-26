@@ -30,8 +30,16 @@ function glyphs(laid: LaidOutScore, role: DisplayGlyph['role']): DisplayGlyph[] 
 }
 
 function lines(laid: LaidOutScore, role: string) {
-  return (laid.items as readonly { kind: string; role: string; y1: number; x1: number; x2: number }[])
-    .filter((item) => item.kind === 'line' && item.role === role);
+  return (
+    laid.items as readonly {
+      kind: string;
+      role: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }[]
+  ).filter((item) => item.kind === 'line' && item.role === role);
 }
 
 const CHOIR = ['|', 'S: d : r : m : f', 'A: r : m : f : s', 'T: m : f : s : l', 'B: f : s : l : t'].join('\n');
@@ -89,14 +97,12 @@ describe('layout: single voice', () => {
   });
 
   it('wraps onto a new system when a measure will not fit', () => {
-    const { laid } = build('|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t',{ systemWidth: 300 });
+    const { laid } = build('|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t',{ systemWidth: 300 });
     expect(new Set(laid.notes.map((note) => note.systemIndex)).size).toBe(2);
   });
 
   it('keeps every note inside the system width', () => {
-    const { laid } = build('|d ! - : r ! - : m ! - : f : s : l : t
-|d : r : m : f : s : l : t',{ systemWidth: 300 });
+    const { laid } = build('|d ! - : r ! - : m ! - : f : s : l : t\n|d : r : m : f : s : l : t',{ systemWidth: 300 });
     for (const note of laid.notes) {
       expect(note.x).toBeGreaterThanOrEqual(0);
       expect(note.x + note.width).toBeLessThanOrEqual(laid.width);
@@ -201,12 +207,17 @@ describe('layout: choir', () => {
     expect(groups[0]!.y2 - groups[0]!.y1).toBeLessThan(full);
   });
 
-  it('reads the : separators without engraving anything for them', () => {
-    const withColons = build(['|', 'S: d : r : m : f'].join('\n'));
-    const spaced = build(['|', 'S: d r m f'].join('\n'));
-    expect(withColons.laid.notes.map((note) => note.x)).toEqual(
-      spaced.laid.notes.map((note) => note.x),
+  it('engraves a : as nothing and a | as only a short barline', () => {
+    const allColons = build(['|', 'S: d : r : m : f'].join('\n'));
+    const oneBar = build(['|', 'S: d : r | m : f'].join('\n'));
+
+    // The letters sit in the same place either way.
+    expect(allColons.laid.notes.map((note) => note.x)).toEqual(
+      oneBar.laid.notes.map((note) => note.x),
     );
+    // Only the group break adds a line.
+    expect(lines(allColons.laid, 'group-barline')).toHaveLength(0);
+    expect(lines(oneBar.laid, 'group-barline')).toHaveLength(1);
   });
 
   it('writes the rhythm once, on the first voice only', () => {
@@ -333,9 +344,7 @@ describe('systems and section labels', () => {
   });
 
   it('stacks systems down the page rather than on one line', () => {
-    const text = '|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t';
+    const text = '|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t';
     const { laid } = build(text, { systemWidth: 300 });
     const tops = [...new Set(laid.notes.map((note) => note.y))].sort((a, b) => a - b);
     expect(tops.length).toBeGreaterThan(1);
@@ -366,10 +375,7 @@ describe('systems and section labels', () => {
 
   it('grows the page height to fit every system', () => {
     const single = build('|d : r : m : f : s : l : t',{ systemWidth: 960 }).laid;
-    const many = build('|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t
-|d : r : m : f : s : l : t',{
+    const many = build('|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t\n|d : r : m : f : s : l : t',{
       systemWidth: 300,
     }).laid;
     expect(many.height).toBeGreaterThan(single.height);

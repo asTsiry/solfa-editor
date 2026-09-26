@@ -230,14 +230,14 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
 |
 S: d! : r : m : f : s : l : t
 A: 0 : m : f : s : l : t : d'
-T: m : f : s : l : t : d' r'
-B: f : s : l : t : d' r' m
+T: m : f : s : l : t : d' : r'
+B: f : s : l : t : d' : r' : m
 P: Ave : Ma : ri : a : _ : le : nos
 |1:
-S: d' r' m' f' s' l' t'
-A: m' f' s' l' t' d''
-T: f' s' l' t' d'' r''
-B: s' l' t' d'' r'' m''
+S: d' : r' : m' : f' : s' : l' : t'
+A: m' : f' : s' : l' : t' : d''
+T: f' : s' : l' : t' : d'' : r''
+B: s' : l' : t' : d'' : r'' : m''
 P: Se_ : glori : fi : ca : ve : unt`}</pre>
         <p>
           Ici la première voix porte les durées : <code>d!</code> vaut 3 temps et

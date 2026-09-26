@@ -8,21 +8,22 @@ const STORAGE_KEY = 'solfa-editor:text';
 
 export const SAMPLE = `// Chœur à quatre voix : do = do
 :do=C
+:time=4/4
 :title=Ave Maria
 :subtitle=pour chœur à quatre voix
 |
 S: d : r : m : f : s : l : t
 A: r : m : f : s : l : t : d'
-T: m : f : s : l : t : d' r'
-B: f : s : l : t : d' r' m
+T: m : f : s : l : t : d' : r'
+B: f : s : l : t : d' : r' : m
 P: do : re : mi : fa : sol : la : si
 
 |1:
-S: d' r' m' f' s' l' t'
-A: m' f' s' l' t' d''
-T: f' s' l' t' d'' r''
-B: s' l' t' d'' r'' m''
-P: do' re' mi' fa' sol' la' si'
+S: d' : r' : m' : f' : s' : l' : t'
+A: m' : f' : s' : l' : t' : d''
+T: f' : s' : l' : t' : d'' : r''
+B: s' : l' : t' : d'' : r'' : m''
+P: do' : re' : mi' : fa' : sol' : la' : si'
 `;
 
 export function App(): JSX.Element {

@@ -27,9 +27,9 @@ describe('App', () => {
     const { container } = render(<App />);
     expect(container.querySelector('canvas')).not.toBeNull();
     const content = container.querySelector('.cm-content')?.textContent ?? '';
-    expect(content).toContain('S: d r m f s l t');
-    expect(content).toContain('B: f s l t');
-    expect(content).toContain('P: do re mi fa sol la si');
+    expect(content).toContain('S: d : r : m : f : s : l : t');
+    expect(content).toContain('B: f : s : l : t');
+    expect(content).toContain('P: do : re : mi : fa : sol : la : si');
   });
 
   it('reports no parse error for the sample score', () => {
@@ -82,7 +82,7 @@ describe('App', () => {
 
   it('persists the text to localStorage on load', () => {
     render(<App />);
-    expect(window.localStorage.getItem('solfa-editor:text')).toContain('A: r m f s l t');
+    expect(window.localStorage.getItem('solfa-editor:text')).toContain('A: r : m : f : s : l : t : d');
   });
 
   it('reports when there is nothing to load', async () => {

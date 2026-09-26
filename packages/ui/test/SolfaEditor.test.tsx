@@ -195,7 +195,7 @@ describe('SolfaEditor: note controls', () => {
     render(<Harness document={doc} />);
     selectNote(doc, 'tenor');
     fireEvent.click(screenButtonByTitle('Rendre cette note dièse'));
-    expect(doc.getState().text).toContain('T: m# f s l');
+    expect(doc.getState().text).toContain('T: m# : f : s : l');
     fireEvent.click(screenButtonByTitle('Enlever l’altération'));
     expect(doc.getState().text).toContain('T: m : f : s : l');
   });
@@ -413,9 +413,9 @@ describe('SolfaEditor: note controls', () => {
     render(<Harness document={doc} />);
     selectNote(doc, 'tenor');
     fireEvent.click(screenButtonByTitle('Faire alterner'));
-    expect(doc.getState().text).toContain('T: m# f s l');
+    expect(doc.getState().text).toContain('T: m# : f : s : l');
     fireEvent.click(screenButtonByTitle('Faire alterner'));
-    expect(doc.getState().text).toContain('T: mb f s l');
+    expect(doc.getState().text).toContain('T: mb : f : s : l');
     fireEvent.click(screenButtonByTitle('Faire alterner'));
     expect(doc.getState().text).toContain('T: m : f : s : l');
   });

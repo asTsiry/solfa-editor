@@ -42,9 +42,9 @@ describe('the text panel drives the engraving', () => {
 
   it('keeps the engraving in step with a single inserted note', () => {
     const { document, view } = mount();
-    const at = CHOIR.indexOf('A: r : m : f : s') + 'A: r : m : f'.length;
+    const at = CHOIR.indexOf('A: r : m : f : s') + 'A: r : m : f : '.length;
     act(() => {
-      view.dispatch({ changes: { from: at, insert: 'l ' } });
+      view.dispatch({ changes: { from: at, insert: 'l : ' } });
     });
     expect(document.getState().text).toContain('A: r : m : f : l : s');
     expect(degreesOf(document, 'alto')).toEqual([1, 2, 3, 5, 4]);
@@ -116,7 +116,7 @@ describe('the text panel is a real editor', () => {
 
   it('undoes a whole typing run with one step', () => {
     const { document, view } = mount();
-    let at = CHOIR.indexOf('S: d : r : m : f') + 'S: d '.length;
+    let at = CHOIR.indexOf('S: d : r : m : f') + 'S: d : '.length;
     for (const letter of ['l', 't', 'd']) {
       act(() => {
         view.dispatch({ changes: { from: at, insert: letter } });
@@ -139,7 +139,7 @@ describe('the text panel is a real editor', () => {
 
   it('keeps a paste as its own undo step', () => {
     const { document, view } = mount();
-    const at = CHOIR.indexOf('S: d : r : m : f') + 'S: d '.length;
+    const at = CHOIR.indexOf('S: d : r : m : f') + 'S: d : '.length;
     act(() => {
       view.dispatch({ changes: { from: at, insert: 'ltd' } });
     });
