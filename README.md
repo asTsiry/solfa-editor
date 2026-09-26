@@ -107,9 +107,12 @@ value runs to the end of the line, because a title is prose:
 ```
 
 The title is engraved once, centred above the first system, and the subtitle
-sits under it in italics. On the left, under the heading, a key line shows the
-tonic with its alteration written out (`Do nat C`, `Fa dia F#`, `Si bem Bb`)
-followed by the time signature. A score with neither reserves no space for them. Above
+sits under it in italics. On the left, under the heading, a key line reads
+`Do C, 4/4`: the syllable and the alteration are written out from the tonic, and
+the tonic and the time signature are two dropdowns. The tonic offers the twelve
+pitches, `C` to `B`, and the alteration follows it, so `Fa dia F#` and
+`Si bem Bb` are not mistaken for a natural key. Both dropdowns write a directive
+into the text, so they are undoable. A score with neither reserves no space for them. Above
 the engraving there is an input on the title itself and a `+ Sous-titre` button
 that reveals a second one, so the heading is typed straight onto the page; both
 write a directive into the text, which means undo works like everywhere else.

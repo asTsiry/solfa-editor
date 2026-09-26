@@ -1,4 +1,4 @@
-import { DEFAULT_KEY, LETTERS, keyLabel, octaveOf, pulseMarks, tonicLabel } from './pitch.js';
+import { DEFAULT_KEY, LETTERS, octaveOf, pulseMarks, tonicLabel } from './pitch.js';
 import type { Beat, Measure, Part, Score, Section, Span, VoiceNote } from './score.js';
 
 export type GlyphRole =
@@ -6,7 +6,6 @@ export type GlyphRole =
   | 'accidental'
   | 'octave-dot'
   | 'pulse-mark'
-  | 'section-label'
   | 'part-name'
   | 'lyric'
   | 'measure-number'
@@ -487,18 +486,6 @@ export function layout(
     if (sectionIndex > 0) newSystem();
     if (sectionIndex > 0 || systemHeight !== needed) systemHeight = needed;
     openSystem();
-
-    items.push({
-      kind: 'glyph',
-      role: 'section-label',
-      code: keyLabel(section.key),
-      x: options.leftMargin,
-      y: y - 18,
-      width: 0,
-      height: 0,
-      fontSize: 12,
-      noteId: null,
-    });
 
     for (let rowIndex = 0; gutter > 0 && rowIndex < rows.length; rowIndex += 1) {
       const part = parts[rows[rowIndex] ?? -1];

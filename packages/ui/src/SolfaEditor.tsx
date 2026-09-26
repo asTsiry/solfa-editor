@@ -5,7 +5,6 @@ import {
   layout,
   textBox,
   lyricGlyphOf,
-  tonicLabel,
   type LayoutOptions,
   type SolfaDocument,
   type VoiceNote,
@@ -178,7 +177,7 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
           />
           <KeyLine
             document={document}
-            tonic={tonicLabel(state.score.sections[0]?.key ?? DEFAULT_KEY)}
+            tonicKey={state.score.sections[0]?.key ?? DEFAULT_KEY}
             timeSignature={state.score.timeSignature}
             slot={headingSlots.keyLineSlot}
           />

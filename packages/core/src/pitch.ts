@@ -56,6 +56,22 @@ const SPELLING: Readonly<Record<number, readonly [string, Accidental]>> = {
 
 export const PITCH_LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 
+/** The twelve tonics offered by the dropdown, in ascending order. */
+export const TONIC_PITCH_NAMES = [
+  'C',
+  'C#',
+  'D',
+  'Eb',
+  'E',
+  'F',
+  'F#',
+  'G',
+  'Ab',
+  'A',
+  'Bb',
+  'B',
+] as const;
+
 const NATURAL_CLASS: Readonly<Record<string, number>> = {
   C: 0,
   D: 2,
@@ -123,24 +139,35 @@ export function tonicSyllable(key: Key): string {
   return LETTER_SYLLABLES[key.doLetter] ?? 'Do';
 }
 
-// The alteration of the tonic against its own natural letter. The key line always
-// spells it out rather than leaving the tonic looking bare, so the reader can see
-// at a glance that the key is altered even when the letter suggests otherwise.
-export function tonicAccidentalWord(key: Key): string {
+// How far the tonic sits from its own natural letter, so the word and the pitch
+// name never disagree: a `Db` key reads `bem` and `Db`, not `D#`.
+function tonicShift(key: Key): number {
   const natural = NATURAL_CLASS[key.doLetter];
-  if (natural === undefined) return 'nat';
-  const difference = mod12(key.doPitch) - natural;
-  if (difference === 1) return 'dia';
-  if (difference === -1) return 'bem';
-  return 'nat';
+  if (natural === undefined) return 0;
+  return mod12(key.doPitch) - natural;
 }
 
-/** `Do nat C`, `Sol dia G#`, `La bem Bb`. */
+/** The alteration of the tonic, spelled out only when there is one. */
+export function tonicAccidentalWord(key: Key): 'dia' | 'bem' | '' {
+  const shift = tonicShift(key);
+  if (shift === 1) return 'dia';
+  if (shift === -1) return 'bem';
+  return '';
+}
+
+/** The tonic as the dropdown writes it, e.g. `C`, `F#`, `Bb`. */
+export function tonicPitchName(key: Key): string {
+  const shift = tonicShift(key);
+  if (shift === 1) return `${key.doLetter}#`;
+  if (shift === -1) return `${key.doLetter}b`;
+  if (shift === 0) return key.doLetter;
+  return formatPitchName(key.doPitch, key.doLetter);
+}
+
+/** `Do C`, `Sol dia G#`, `Si bem Bb`. */
 export function tonicLabel(key: Key): string {
-  return `${tonicSyllable(key)} ${tonicAccidentalWord(key)} ${formatPitchName(
-    key.doPitch,
-    key.doLetter,
-  )}`;
+  const word = tonicAccidentalWord(key);
+  return `${tonicSyllable(key)}${word === '' ? '' : ` ${word}`} ${tonicPitchName(key)}`;
 }
 
 export type Spelling = {

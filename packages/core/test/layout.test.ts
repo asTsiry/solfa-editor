@@ -362,20 +362,20 @@ describe('systems and section labels', () => {
     expect(new Set(xs).size).toBe(xs.length);
   });
 
-  it('starts a new system for each new section and labels it with the key', () => {
+  it('starts a new system for each new section', () => {
     const { laid } = build('|d : r\n|f:\nf : s : l', { systemWidth: 960 });
-    expect(glyphs(laid, 'section-label').map((item) => item.code)).toEqual(['C major', 'F major']);
+    // The key is not engraved on the score any more, only on the key line under
+    // the title, so the systems are told apart by where they start.
+    const tops = [...new Set(laid.notes.map((note) => note.y))].sort((a, b) => a - b);
+    expect(tops.length).toBeGreaterThan(1);
   });
 
-  it('never overlaps a section label with the notes of its system', () => {
-    const { laid } = build('|d : r\n|f:\nf : s : l', { systemWidth: 960 });
-    const label = glyphs(laid, 'section-label')[0]!;
-    expect(label.y).toBeLessThan(Math.min(...laid.notes.map((note) => note.y)));
-  });
-
-  it('labels a numbered section with the key it kept', () => {
+  it('engraves no key label on the score', () => {
     const { laid } = build([':do=F', '|1:', 'S: d : r', '|2:', 'S: m : f'].join('\n'));
-    expect(glyphs(laid, 'section-label').map((item) => item.code)).toEqual(['F major', 'F major']);
+    const texts = (laid.items as readonly { kind: string; code?: string }[])
+      .filter((item) => item.kind === 'glyph')
+      .map((item) => item.code ?? '');
+    expect(texts.filter((code) => /major|minor/.test(code))).toEqual([]);
   });
 
   it('grows the page height to fit every system', () => {

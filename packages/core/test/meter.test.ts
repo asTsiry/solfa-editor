@@ -10,6 +10,7 @@ import { parse } from '../src/parse.js';
 import { serialize } from '../src/serialize.js';
 import { layout, DEFAULT_LAYOUT, type LaidOutScore, type DisplayGlyph } from '../src/layout.js';
 import { sequentialIdFactory } from '../src/ids.js';
+import { TONIC_PITCH_NAMES } from '../src/pitch.js';
 
 function keyLines(laid: LaidOutScore): string[] {
   return (laid.items as readonly DisplayGlyph[])
@@ -90,7 +91,7 @@ describe('the time signature', () => {
   it('engraves the tonic and the signature under the title', () => {
     const { score } = parse(':do=C\n:time=3/4\n|');
     const laid = layout(score, [], DEFAULT_LAYOUT);
-    expect(keyLines(laid)).toEqual(['Do nat C, 3/4']);
+    expect(keyLines(laid)).toEqual(['Do C, 3/4']);
   });
 
   it('engraves the line even without a title', () => {
@@ -106,15 +107,36 @@ describe('the time signature', () => {
     );
     expect(errors).toHaveLength(0);
     expect(score.sections.map((section) => section.key.doLetter)).toEqual(['C', 'B']);
-    expect(keyLines(layout(score, [], DEFAULT_LAYOUT))).toEqual(['Do nat C, 4/4']);
+    expect(keyLines(layout(score, [], DEFAULT_LAYOUT))).toEqual(['Do C, 4/4']);
   });
 });
 
 describe('the tonic of the key line', () => {
-  it('always spells the alteration out', () => {
-    expect(keyLineOf(':do=C\n|')).toBe('Do nat C, 4/4');
+  it('spells the alteration only when the tonic has one', () => {
+    expect(keyLineOf(':do=C\n|')).toBe('Do C, 4/4');
+    expect(keyLineOf(':do=F\n|')).toBe('Fa F, 4/4');
     expect(keyLineOf(':do=F#\n|')).toBe('Fa dia F#, 4/4');
     expect(keyLineOf(':do=Bb\n|')).toBe('Si bem Bb, 4/4');
-    expect(keyLineOf(':do=F\n|')).toBe('Fa nat F, 4/4');
+  });
+
+  it('reads the tonic as the text wrote it', () => {
+    // The word and the name come from the same shift, so a flat spelling is
+    // never shown as a sharp one.
+    expect(keyLineOf(':do=Db\n|')).toBe('Ré bem Db, 4/4');
+    expect(keyLineOf(':do=C#\n|')).toBe('Do dia C#, 4/4');
+    expect(keyLineOf(':do=Bb\n|')).toBe('Si bem Bb, 4/4');
+  });
+
+  it('names the tonic of each of the twelve', () => {
+    expect(TONIC_PITCH_NAMES.map((name) => keyLineOf(`:do=${name}\n|`).split(',')[0])).toEqual([
+      'Do C', 'Do dia C#', 'Ré D', 'Mi bem Eb', 'Mi E', 'Fa F', 'Fa dia F#',
+      'Sol G', 'La bem Ab', 'La A', 'Si bem Bb', 'Si B',
+    ]);
+  });
+
+  it('offers the twelve tonics', () => {
+    expect([...TONIC_PITCH_NAMES]).toEqual([
+      'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
+    ]);
   });
 });

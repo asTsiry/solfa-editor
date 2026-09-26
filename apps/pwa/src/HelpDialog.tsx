@@ -54,9 +54,10 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
           Le titre est gravé une seule fois, centré au-dessus du premier système,
           et le sous-titre se place dessous en italique. À gauche, sous
           l&apos;en-tête, une ligne de tonalité indique la tonique avec son
-          altération écrite en toutes lettres (<code>Do nat C</code>,{' '}
-          <code>Fa dia F#</code>, <code>Si bem Bb</code>) puis le nombre de
-          temps. Au-dessus de la
+          tonique (<code>Do C</code>) puis le nombre de temps. Une tonique
+          altérée écrit son altération en toutes lettres, pour qu&apos;elle ne
+          passe pas pour une tonique naturelle : <code>Fa dia F#</code>,{' '}
+          <code>Si bem Bb</code>. Au-dessus de la
           partition, un champ permet de taper le titre directement sur la
           partition, et le bouton <code>+ Sous-titre</code> ajoute ou retire la
           deuxième ligne.

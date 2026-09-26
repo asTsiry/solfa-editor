@@ -43,7 +43,6 @@ const LYRIC_FONT = 'italic 13px ui-sans-serif, system-ui, sans-serif';
 
 function isLabelRole(role: GlyphRole): boolean {
   return (
-    role === 'section-label' ||
     role === 'measure-number' ||
     role === 'part-name' ||
     role === 'key-line'
@@ -104,6 +103,11 @@ export function drawScore(
     readonly selectedNoteIds?: ReadonlySet<string> | undefined;
     readonly hoveredNoteId?: string | null | undefined;
     readonly noteSize?: number | undefined;
+    /**
+     * Leaves the key line unpainted, for the live view where the editable
+     * overlay sits on top of it. Exports keep the engraved line.
+     */
+    readonly skipKeyLine?: boolean | undefined;
   } = {},
 ): void {
   const theme = resolveTheme(options.theme);
@@ -132,6 +136,7 @@ export function drawScore(
   }
 
   for (const item of laid.items) {
+    if (options.skipKeyLine && item.kind === 'glyph' && item.role === 'key-line') continue;
     if (item.kind === 'glyph' && item.noteId !== null && selected.has(item.noteId)) {
       paintItem(context, item, { ...theme, foreground: theme.selection });
       continue;

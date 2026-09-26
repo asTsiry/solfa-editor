@@ -37,6 +37,9 @@ export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
       theme: props.theme,
       selectedNoteIds: selected,
       hoveredNoteId,
+      // The key line is drawn by the editable overlay on top of the canvas,
+      // so painting it here as well would double the text.
+      skipKeyLine: true,
     });
   }, [laid, pixelRatio, props.theme, selected, hoveredNoteId]);
 

@@ -412,6 +412,7 @@
   pointer-events: none;
 }
 
+.solfa-key-line-pitch,
 .solfa-key-line-time {
   padding: 0 2px;
   border: 1px solid transparent;
@@ -424,10 +425,12 @@
   cursor: pointer;
 }
 
+.solfa-key-line-pitch:hover,
 .solfa-key-line-time:hover {
   border-color: var(--solfa-muted);
 }
 
+.solfa-key-line-pitch:focus,
 .solfa-key-line-time:focus {
   outline: none;
   border-color: var(--solfa-accent);

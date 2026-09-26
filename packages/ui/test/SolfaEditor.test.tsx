@@ -545,17 +545,70 @@ describe('the key line', () => {
     return node?.textContent ?? '';
   }
 
-  it('shows the tonic with its alteration and the default signature', () => {
+  function tonicSelect(): HTMLSelectElement {
+    const select = document.querySelector('[data-testid="solfa-tonic-select"]');
+    if (!(select instanceof HTMLSelectElement)) throw new Error('no tonic select');
+    return select;
+  }
+
+  it('shows the tonic and the default signature', () => {
     const doc = new SolfaDocument(CHOIR);
     render(<Harness document={doc} />);
-    expect(tonic()).toBe('Do nat C');
+    expect(tonic()).toBe('Do');
+    expect(tonicSelect().value).toBe('C');
     expect(timeSelect().value).toBe('4/4');
   });
 
   it('reads the tonic of a transposed score', () => {
     const doc = new SolfaDocument([':do=F#', '|', 'S: d : r'].join('\n'));
     render(<Harness document={doc} />);
-    expect(tonic()).toBe('Fa dia F#');
+    expect(tonic()).toBe('Fa dia');
+    expect(tonicSelect().value).toBe('F#');
+  });
+
+  it('offers the twelve tonics', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const values = [...tonicSelect().options].map((option) => option.value);
+    expect(values).toEqual(['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']);
+  });
+
+  it('changes the key from the dropdown and writes it to the text', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    fireEvent.change(tonicSelect(), { target: { value: 'Eb' } });
+    expect(tonic()).toBe('Mi bem');
+    expect(tonicSelect().value).toBe('Eb');
+    expect(doc.getState().text).toContain(':do=Eb');
+    expect(doc.getState().score.sections[0]?.key.doPitch % 12).toBe(3);
+  });
+
+  it('keeps the mode when the tonic changes', () => {
+    const doc = new SolfaDocument([':do=C', ':mode=minor', '|', 'S: d : r'].join('\n'));
+    render(<Harness document={doc} />);
+    fireEvent.change(tonicSelect(), { target: { value: 'G' } });
+    expect(doc.getState().score.sections[0]?.key.mode).toBe('minor');
+    expect(doc.getState().text).toContain(':do=G');
+  });
+
+  it('undoes a tonic change', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    fireEvent.change(tonicSelect(), { target: { value: 'F#' } });
+    act(() => {
+      doc.dispatch({ type: 'history/undo' });
+    });
+    expect(tonicSelect().value).toBe('C');
+    expect(doc.getState().text).not.toContain(':do=');
+  });
+
+  it('shows a tonic that is not one of the twelve', () => {
+    const doc = new SolfaDocument([':do=Db', '|', 'S: d : r'].join('\n'));
+    render(<Harness document={doc} />);
+    // Read as the text wrote it, and added to the list rather than lost.
+    expect(tonic()).toBe('Ré bem');
+    expect(tonicSelect().value).toBe('Db');
+    expect([...tonicSelect().options].map((option) => option.value)).toContain('Db');
   });
 
   it('changes the signature from the dropdown and writes it to the text', () => {
