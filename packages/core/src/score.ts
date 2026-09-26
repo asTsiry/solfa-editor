@@ -51,6 +51,8 @@ export type Section = {
 
 export type Score = {
   readonly kind: 'score';
+  readonly title: string | null;
+  readonly subtitle: string | null;
   readonly parts: readonly Part[];
   readonly sections: readonly Section[];
 };
@@ -270,4 +272,67 @@ export function firstSpanTouching(
   to: number,
 ): readonly Span[] {
   return spans.filter((span) => span.to >= from && span.from <= to);
+}
+
+/**
+ * Replaces the note a voice sings on one beat. Passing `null` makes it a rest;
+ * passing a note makes a rest sing again. Ids of neighbouring notes are kept.
+ */
+export function withBeatNote(
+  score: Score,
+  beatId: string,
+  partId: PartId,
+  note: VoiceNote | null,
+): Score {
+  const index = score.parts.findIndex((part) => part.id === partId);
+  if (index < 0) return score;
+
+  let changed = false;
+  const sections = score.sections.map((section) => {
+    let sectionChanged = false;
+    const measures = section.measures.map((measure) => {
+      const target = measure.beats.find((beat) => beat.id === beatId);
+      if (!target) return measure;
+      const current = target.notes[index] ?? null;
+      if (current === note) return measure;
+      if (current !== null && note !== null && current.id === note.id) return measure;
+      sectionChanged = true;
+      return {
+        ...measure,
+        beats: measure.beats.map((beat) => {
+          if (beat.id !== beatId) return beat;
+          const notes = [...beat.notes];
+          notes[index] = note;
+          return { ...beat, notes: notes as Beat['notes'] };
+        }),
+      };
+    });
+    if (sectionChanged) changed = true;
+    return sectionChanged ? { ...section, measures } : section;
+  });
+  return changed ? { ...score, sections } : score;
+}
+
+/**
+ * The pitch a voice sings nearest to a beat, used when a rest is turned back into
+ * a note so the edit does not jump to an unrelated pitch. The note before the
+ * beat wins; a voice that has not sung yet falls back to the next one it sings.
+ */
+export function nearestNoteOfPart(
+  score: Score,
+  beatId: string,
+  partId: PartId,
+): VoiceNote | null {
+  const index = score.parts.findIndex((part) => part.id === partId);
+  if (index < 0) return null;
+
+  const notes: VoiceNote[] = [];
+  let target = -1;
+  for (const beat of iterateBeats(score)) {
+    if (beat.id === beatId) target = notes.length;
+    const note = beat.notes[index] ?? null;
+    if (note) notes.push(note);
+  }
+  if (target < 0) return null;
+  return notes[target - 1] ?? notes[target] ?? null;
 }

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LAYOUT,
   hitTest,
+  hitTestLyric,
+  hitTestScore,
   layout,
+  textBox,
+  lyricGlyphOf,
   nearestNote,
   type DisplayGlyph,
   type LaidOutScore,
@@ -120,13 +124,13 @@ describe('layout: single voice', () => {
   });
 
   it('handles an empty score', () => {
-    const laid = layout({ kind: 'score', parts: [], sections: [] }, [], DEFAULT_LAYOUT);
+    const laid = layout({ kind: 'score', title: null, subtitle: null, parts: [], sections: [] }, [], DEFAULT_LAYOUT);
     expect(laid.notes).toHaveLength(0);
     expect(laid.hitRegions).toHaveLength(0);
   });
 
   it('handles a score with parts but no music', () => {
-    const laid = layout({ kind: 'score', parts: DEFAULT_PARTS, sections: [] }, [], DEFAULT_LAYOUT);
+    const laid = layout({ kind: 'score', title: null, subtitle: null, parts: DEFAULT_PARTS, sections: [] }, [], DEFAULT_LAYOUT);
     expect(laid.notes).toHaveLength(0);
   });
 });
@@ -344,5 +348,118 @@ describe('systems and section labels', () => {
     expect(many.height).toBeGreaterThan(single.height);
     const lowestNote = Math.max(...many.notes.map((note) => note.y + note.height));
     expect(many.height).toBeGreaterThan(lowestNote);
+  });
+});
+
+describe('layout: clicking the engraving', () => {
+  const CHOIR = [
+    '|',
+    'S: d r m f',
+    'A: r m f s',
+    'T: m f s l',
+    'B: f s l t',
+    'P: do re mi fa',
+  ].join('\n');
+  const laid = layout(parse(CHOIR).score, parse(CHOIR).spans, DEFAULT_LAYOUT);
+
+  it('selects the syllable even where the lowest voice box reaches it', () => {
+    const glyph = lyricGlyphOf(laid, lyricGlyphs(laid)[0]!.beatId!)!;
+    const box = textBox(glyph);
+    // The bass note's touch box overlaps this band; the lyric must still win.
+    expect(hitTest(laid, box.centerX, box.centerY)).not.toBeNull();
+    const hit = hitTestScore(laid, box.centerX, box.centerY);
+    expect(hit).toEqual({ kind: 'lyric', beatId: glyph.beatId });
+  });
+
+  it('still selects a note when the click is on the staff', () => {
+    const note = laid.notes[0]!;
+    const hit = hitTestScore(laid, note.x + note.width / 2, note.y + note.height / 2);
+    expect(hit).toEqual({ kind: 'note', noteId: note.noteId });
+  });
+
+  it('returns nothing for empty engraving space', () => {
+    expect(hitTestScore(laid, laid.width - 4, 4)).toBeNull();
+  });
+
+  it('finds a beat with no syllable, so a word can be added there', () => {
+    const score = parse(['|', 'S: d r', 'P: do'].join('\n'));
+    const plain = layout(score.score, score.spans, DEFAULT_LAYOUT);
+    const slots = lyricGlyphs(plain);
+    expect(slots).toHaveLength(2);
+    expect(slots.map((g) => g.code)).toEqual(['do', '']);
+    const hit = hitTestScore(plain, textBox(slots[1]!).centerX, textBox(slots[1]!).centerY);
+    expect(hit?.kind).toBe('lyric');
+  });
+
+  it('keeps the hit box and the editor position derived from the same numbers', () => {
+    const glyph = lyricGlyphs(laid)[0]!;
+    const box = textBox(glyph);
+    expect(box.centerX).toBe(glyph.x);
+    // The box must contain the visual centre the inline editor is placed on.
+    expect(box.top).toBeLessThan(box.centerY);
+    expect(box.centerY).toBeLessThan(box.top + box.height);
+    expect(hitTestLyric(laid, box.centerX, box.centerY)).toBe(glyph.beatId);
+  });
+});
+
+function lyricGlyphs(target: LaidOutScore) {
+  return target.items.filter(
+    (item): item is Extract<typeof item, { kind: 'glyph' }> =>
+      item.kind === 'glyph' && item.role === 'lyric',
+  );
+}
+
+describe('layout: title block', () => {
+  const NOTES = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t'].join('\n');
+  const laidWith = (text: string) => {
+    const result = parse(text);
+    expect(result.errors).toHaveLength(0);
+    return layout(result.score, result.spans, DEFAULT_LAYOUT);
+  };
+  const roles = (laid: LaidOutScore) =>
+    laid.items.filter(
+      (item): item is Extract<typeof item, { kind: 'glyph' }> =>
+        item.kind === 'glyph' && (item.role === 'title' || item.role === 'subtitle'),
+    );
+
+  it('centres the title on the page', () => {
+    const laid = laidWith(`:title=Ave Maria\n${NOTES}`);
+    const title = roles(laid)[0]!;
+    expect(title.role).toBe('title');
+    expect(title.code).toBe('Ave Maria');
+    expect(title.x).toBe(laid.width / 2);
+  });
+
+  it('puts the subtitle under the title', () => {
+    const laid = laidWith(`:title=Ave Maria\n:subtitle=Cordes\n${NOTES}`);
+    const [title, subtitle] = roles(laid);
+    expect(subtitle!.role).toBe('subtitle');
+    expect(subtitle!.code).toBe('Cordes');
+    expect(subtitle!.x).toBe(laid.width / 2);
+    expect(subtitle!.y).toBeGreaterThan(title!.y);
+    expect(subtitle!.fontSize).toBeLessThan(title!.fontSize);
+  });
+
+  it('lifts the first system to make room for the title', () => {
+    const plain = laidWith(NOTES);
+    const withTitle = laidWith(`:title=Ave Maria\n${NOTES}`);
+    const withBoth = laidWith(`:title=Ave Maria\n:subtitle=Cordes\n${NOTES}`);
+    const firstTop = (laid: LaidOutScore): number =>
+      Math.min(...laid.items.filter((i) => i.kind === 'line').map((i) => i.y1));
+
+    expect(firstTop(withTitle)).toBeGreaterThan(firstTop(plain));
+    expect(firstTop(withBoth)).toBeGreaterThan(firstTop(withTitle));
+    expect(withTitle.height - plain.height).toBe(DEFAULT_LAYOUT.titleFontSize + 10);
+    expect(withBoth.height - withTitle.height).toBe(DEFAULT_LAYOUT.subtitleFontSize + 12);
+  });
+
+  it('draws no title block when there is no title', () => {
+    expect(roles(laidWith(NOTES))).toHaveLength(0);
+  });
+
+  it('grows the exported image height to fit the title', () => {
+    const plain = laidWith(NOTES);
+    const withTitle = laidWith(`:title=Ave Maria\n${NOTES}`);
+    expect(withTitle.height).toBeGreaterThan(plain.height);
   });
 });

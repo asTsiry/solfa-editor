@@ -9,7 +9,9 @@ export type GlyphRole =
   | 'section-label'
   | 'part-name'
   | 'lyric'
-  | 'measure-number';
+  | 'measure-number'
+  | 'title'
+  | 'subtitle';
 
 export type DisplayGlyph = {
   readonly kind: 'glyph';
@@ -21,6 +23,7 @@ export type DisplayGlyph = {
   readonly height: number;
   readonly fontSize: number;
   readonly noteId: string | null;
+  readonly beatId?: string | null;
 };
 
 export type DisplayLine = {
@@ -85,6 +88,8 @@ export type LayoutOptions = {
   readonly partNameWidth: number;
   readonly lyricHeight: number;
   readonly lyricFontSize: number;
+  readonly titleFontSize: number;
+  readonly subtitleFontSize: number;
 };
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
@@ -101,6 +106,8 @@ export const DEFAULT_LAYOUT: LayoutOptions = {
   partNameWidth: 58,
   lyricHeight: 24,
   lyricFontSize: 13,
+  titleFontSize: 26,
+  subtitleFontSize: 15,
 };
 
 const BAR_PADDING = 14;
@@ -178,11 +185,19 @@ export function layout(
   const voiceRowHeight = options.noteHeight + options.partGap;
   const systems = new Map<number, SystemRecord>();
 
+  const centreX = options.systemWidth / 2;
+
   const rowsHeight = (record: SystemRecord): number =>
     record.rows.length * voiceRowHeight + (record.lyrics ? options.lyricHeight : 0);
 
   let systemHeight = voiceRowHeight + options.systemGap;
-  let y = options.topMargin;
+  // The title block sits above the first system and is centred on the page rather
+  // than on the system, so it is drawn once before any system is opened.
+  const titleBlockHeight =
+    (score.title === null ? 0 : options.titleFontSize + 10) +
+    (score.subtitle === null ? 0 : options.subtitleFontSize + 12);
+
+  let y = options.topMargin + titleBlockHeight;
   let x = options.leftMargin;
   let currentSystem = 0;
   let isFirstMeasureOnSystem = true;
@@ -206,6 +221,44 @@ export function layout(
     isFirstMeasureOnSystem = true;
     openSystem();
   };
+
+  const textWidth = (text: string, fontSize: number): number => text.length * fontSize * 0.55;
+
+  const openTitleBlock = (): void => {
+    if (score.title !== null) {
+      items.push({
+        kind: 'glyph',
+        role: 'title',
+        code: score.title,
+        x: centreX,
+        y: options.topMargin + options.titleFontSize,
+        width: textWidth(score.title, options.titleFontSize),
+        height: options.titleFontSize + 4,
+        fontSize: options.titleFontSize,
+        noteId: null,
+        beatId: null,
+      });
+    }
+    if (score.subtitle !== null) {
+      items.push({
+        kind: 'glyph',
+        role: 'subtitle',
+        code: score.subtitle,
+        x: centreX,
+        y:
+          options.topMargin +
+          (score.title === null ? 0 : options.titleFontSize + 10) +
+          options.subtitleFontSize,
+        width: textWidth(score.subtitle, options.subtitleFontSize),
+        height: options.subtitleFontSize + 4,
+        fontSize: options.subtitleFontSize,
+        noteId: null,
+        beatId: null,
+      });
+    }
+  };
+
+  openTitleBlock();
 
   const placeMeasure = (pending: PendingMeasure): void => {
     const record = systems.get(currentSystem) ?? {
@@ -343,17 +396,26 @@ export function layout(
         });
       }
 
-      if (beat.lyric !== null) {
+      // A slot is laid out for every beat of a system that has a lyric row, even
+      // when the beat carries no word, so the row can be clicked to write one and
+      // the inline editor always has a real position. An empty code draws nothing,
+      // and a system without a lyric row reserves no space and gets no slots.
+      if (currentLyrics) {
+        const lyric = beat.lyric ?? '';
         items.push({
           kind: 'glyph',
           role: 'lyric',
-          code: beat.lyric,
+          code: lyric,
           x: letterX + options.cellWidth / 2,
           y: top + pending.rows.length * voiceRowHeight + options.lyricFontSize + 6,
-          width: beat.lyric.length * options.lyricFontSize * 0.55,
-          height: options.lyricFontSize,
+          width: Math.max(
+            options.lyricFontSize * 0.6,
+            lyric.length * options.lyricFontSize * 0.55,
+          ),
+          height: options.lyricFontSize + 4,
           fontSize: options.lyricFontSize,
           noteId: null,
+          beatId: beat.id,
         });
       }
 
@@ -497,4 +559,73 @@ export function nearestNote(laid: LaidOutScore, x: number, y: number): string | 
     }
   }
   return best ? best.noteId : null;
+}
+
+/**
+ * The box a centred text glyph occupies, in the same terms the hit test and the
+ * inline editors use, so they can never drift apart. Such glyphs are drawn on
+ * their baseline, so the box is measured outwards from it.
+ */
+export function textBox(glyph: Extract<DisplayGlyph, { kind: 'glyph' }>): {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+  readonly centerX: number;
+  readonly centerY: number;
+} {
+  const top = glyph.y - glyph.fontSize;
+  const height = glyph.fontSize + 4;
+  return {
+    left: glyph.x - glyph.width / 2,
+    top,
+    width: glyph.width,
+    height,
+    centerX: glyph.x,
+    centerY: top + height / 2,
+  };
+}
+
+/**
+ * The glyph of a beat's syllable slot, laid out whether or not the beat has a word.
+ */
+export function hitTestLyric(laid: LaidOutScore, x: number, y: number): string | null {
+  for (const item of laid.items) {
+    if (item.kind !== 'glyph' || item.role !== 'lyric' || !item.beatId) continue;
+    const box = textBox(item);
+    if (x >= box.left && x <= box.left + box.width && y >= box.top && y <= box.top + box.height) {
+      return item.beatId;
+    }
+  }
+  return null;
+}
+
+/** The syllable glyph of a beat, laid out whether or not the beat has a word. */
+export function lyricGlyphOf(
+  laid: LaidOutScore,
+  beatId: string,
+): Extract<DisplayGlyph, { kind: 'glyph' }> | null {
+  for (const item of laid.items) {
+    if (item.kind === 'glyph' && item.role === 'lyric' && item.beatId === beatId) {
+      return item;
+    }
+  }
+  return null;
+}
+
+export type ScoreHit =
+  | { readonly kind: 'note'; readonly noteId: string }
+  | { readonly kind: 'lyric'; readonly beatId: string };
+
+/**
+ * What a click on the engraving selects. A syllable wins over a note, because a
+ * note's touch box runs a full note height below its baseline: on a choir system
+ * that box would otherwise cover the whole lyric row, and clicking a word would
+ * select the lowest voice instead.
+ */
+export function hitTestScore(laid: LaidOutScore, x: number, y: number): ScoreHit | null {
+  const beatId = hitTestLyric(laid, x, y);
+  if (beatId !== null) return { kind: 'lyric', beatId };
+  const noteId = hitTest(laid, x, y);
+  return noteId === null ? null : { kind: 'note', noteId };
 }

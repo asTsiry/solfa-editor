@@ -79,6 +79,8 @@ const enum Ch {
 }
 
 const LYRIC_ALIASES = new Set(['p', 'paroles', 'parole', 'lyrics', 'lyric', 'words', 'text']);
+
+const TITLE_DIRECTIVES = new Set(['title', 'subtitle']);
 const CONTINUE = '_';
 const Rest = '0';
 
@@ -308,6 +310,18 @@ class Parser {
     this.pos += 1;
 
     const valueStart = this.pos;
+    // A title or subtitle is prose, so its value runs to the end of the line; every
+    // other directive is a single token such as a key or a parts list.
+    if (TITLE_DIRECTIVES.has(name)) {
+      while (
+        !this.done &&
+        this.code() !== Ch.LineFeed &&
+        this.code() !== Ch.CarriageReturn
+      ) {
+        this.pos += 1;
+      }
+      return { name, value: this.text.slice(valueStart, this.pos).trim() };
+    }
     while (!this.done && !this.isSpace(this.code())) this.pos += 1;
     return { name, value: this.text.slice(valueStart, this.pos) };
   }
@@ -473,6 +487,12 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
 
   const sections: MutableSection[] = [];
   let parts: Part[] = [...DEFAULT_PARTS];
+  let title: string | null = null;
+  let subtitle: string | null = null;
+  const setText = (field: 'title' | 'subtitle', value: string | null): void => {
+    if (field === 'title') title = value;
+    else subtitle = value;
+  };
   let currentKey: Key = { ...DEFAULT_KEY };
   let currentMeasures: MutableMeasure[] = [];
   let currentBeats: MutableBeat[] = [];
@@ -721,6 +741,14 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
       else parser.error(`":mode" expects major or minor, found "${value}"`, at);
       return;
     }
+    if (TITLE_DIRECTIVES.has(name)) {
+      if (value === '') {
+        setText(name === 'title' ? 'title' : 'subtitle', null);
+      } else {
+        setText(name === 'title' ? 'title' : 'subtitle', value);
+      }
+      return;
+    }
     if (name === 'parts' || name === 'voices') {
       const next = parsePartsDirective(value);
       if (next === null) {
@@ -804,6 +832,8 @@ export function parse(text: string, options: ParseOptions = {}): ParseResult {
 
   const score: Score = {
     kind: 'score',
+    title,
+    subtitle,
     parts,
     sections: sections.map(
       (section): Section => ({

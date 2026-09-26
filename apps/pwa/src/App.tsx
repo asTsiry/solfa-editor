@@ -8,6 +8,8 @@ const STORAGE_KEY = 'solfa-editor:text';
 
 export const SAMPLE = `// Chœur à quatre voix : do = do
 :do=C
+:title=Ave Maria
+:subtitle=pour chœur à quatre voix
 |
 S: d r m f s l t
 A: r m f s l t d'

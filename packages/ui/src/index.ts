@@ -21,4 +21,6 @@ export {
 } from './text/solfaLanguage.js';
 export { solfaAutocompletion } from './text/solfaCompletion.js';
 export { createSolfaDocument, useSolfaDocument } from './state/useSolfaDocument.js';
+export { NoteToolbar, type NoteToolbarProps } from './NoteToolbar.js';
+export { LyricEditor, type LyricEditorProps, type LyricEditorTarget } from './LyricEditor.js';
 export { Modal, type ModalProps } from './Modal.js';

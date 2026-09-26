@@ -7,7 +7,9 @@
   --solfa-surface: #ffffff;
   --solfa-border: #e4dfd6;
   --solfa-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --solfa-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --solfa-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --solfa-accent: #4d7cff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,6 +21,7 @@
     --solfa-error: #ff6b5e;
     --solfa-surface: #1c1f25;
     --solfa-border: #2e333c;
+    --solfa-accent: #78a0ff;
   }
 }
 
@@ -327,4 +330,134 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--solfa-muted);
+}
+
+.solfa-stage {
+  position: relative;
+  display: inline-block;
+}
+
+.solfa-lyric-input {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+  min-width: 3.2em;
+  padding: 0 2px;
+  border: 1px solid var(--solfa-key);
+  border-radius: 4px;
+  background: var(--solfa-surface);
+  color: var(--solfa-note);
+  font-family: var(--solfa-font);
+  font-size: 13px;
+  font-style: italic;
+  text-align: center;
+  outline: none;
+}
+
+.solfa-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--solfa-border);
+}
+
+.solfa-toolbar button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--solfa-border);
+  border-radius: 6px;
+  background: var(--solfa-surface);
+  color: var(--solfa-note);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.solfa-toolbar button:hover:not(:disabled) {
+  border-color: var(--solfa-key);
+}
+
+.solfa-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.solfa-toolbar-hint {
+  margin-left: auto;
+  color: var(--solfa-muted);
+  font-size: 12px;
+}
+
+.solfa-heading {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.solfa-heading-title,
+.solfa-heading-subtitle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--solfa-note);
+  font-family: var(--solfa-serif);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.solfa-heading-title {
+  font-weight: 600;
+}
+
+.solfa-heading-subtitle {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--solfa-muted);
+}
+
+.solfa-heading-title::placeholder,
+.solfa-heading-subtitle::placeholder {
+  color: var(--solfa-muted);
+  opacity: 0.55;
+}
+
+.solfa-heading-title:hover,
+.solfa-heading-subtitle:hover {
+  border-color: var(--solfa-muted);
+}
+
+.solfa-heading-title:focus,
+.solfa-heading-subtitle:focus {
+  outline: none;
+  border-color: var(--solfa-accent);
+  background: var(--solfa-surface);
+}
+
+.solfa-heading-toggle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 1px 8px;
+  border: 1px dashed var(--solfa-muted);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--solfa-muted);
+  font-family: var(--solfa-font);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.solfa-heading-toggle:hover {
+  opacity: 1;
+  color: var(--solfa-note);
+  border-style: solid;
 }

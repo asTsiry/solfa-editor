@@ -1,25 +1,18 @@
-import {
-  DEFAULT_LAYOUT,
-  hitTest,
-  layout,
-  type LayoutOptions,
-  type Score,
-  type Span,
-} from '@solfa/core';
+import { hitTestScore, textBox, lyricGlyphOf, type LaidOutScore } from '@solfa/core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { JSX, PointerEvent as ReactPointerEvent } from 'react';
 import { drawScore, sizeCanvas, type CanvasTheme } from './canvas/render.js';
-import { createEditorState, createSolfaEditor } from './text/createEditor.js';
+import { createSolfaEditor } from './text/createEditor.js';
 import type { SolfaEditorHandle } from './text/createEditor.js';
+import type { LyricEditorTarget } from './LyricEditor.js';
 
 export type SolfaCanvasProps = {
-  readonly score: Score;
-  readonly spans: readonly Span[];
+  readonly laid: LaidOutScore;
   readonly selectedNoteIds: readonly string[];
   readonly theme?: CanvasTheme | undefined;
-  readonly layoutOptions?: Partial<LayoutOptions> | undefined;
   readonly onSelectNote: (noteId: string | null) => void;
-  readonly onHoverNote?: (noteId: string | null) => void;
+  readonly onHoverNote?: ((noteId: string | null) => void) | undefined;
+  readonly onSelectLyric?: ((target: LyricEditorTarget) => void) | undefined;
 };
 
 export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
@@ -31,13 +24,7 @@ export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
     setPixelRatio(window.devicePixelRatio || 1);
   }, []);
 
-  const options = useMemo<LayoutOptions>(
-    () => ({ ...DEFAULT_LAYOUT, ...props.layoutOptions }),
-    [props.layoutOptions],
-  );
-
-  const laid = useMemo(() => layout(props.score, props.spans, options), [props.score, props.spans, options]);
-
+  const laid = props.laid;
   const selected = useMemo(() => new Set(props.selectedNoteIds), [props.selectedNoteIds]);
 
   useLayoutEffect(() => {
@@ -70,7 +57,8 @@ export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
   const handleMove = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const { x, y } = toScorePoint(event);
-      const noteId = hitTest(laid, x, y);
+      const hit = hitTestScore(laid, x, y);
+      const noteId = hit?.kind === 'note' ? hit.noteId : null;
       if (noteId === hoveredNoteId) return;
       setHoveredNoteId(noteId);
       props.onHoverNote?.(noteId);
@@ -78,10 +66,47 @@ export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
     [toScorePoint, laid, hoveredNoteId, props],
   );
 
+  const openLyricEditor = useCallback(
+    (beatId: string) => {
+      const glyph = lyricGlyphOf(laid, beatId);
+      if (!glyph || !props.onSelectLyric) return;
+      const box = textBox(glyph);
+      props.onSelectLyric({
+        beatId,
+        x: box.centerX,
+        y: box.centerY,
+        fontSize: glyph.fontSize,
+        lyric: glyph.code,
+      });
+    },
+    [laid, props],
+  );
+
   const handleClick = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const { x, y } = toScorePoint(event);
-      props.onSelectNote(hitTest(laid, x, y));
+      const hit = hitTestScore(laid, x, y);
+      if (hit === null) {
+        props.onSelectLyric?.(null);
+        return;
+      }
+      if (hit.kind === 'note') {
+        props.onSelectNote(hit.noteId);
+        return;
+      }
+      if (!props.onSelectLyric) return;
+      openLyricEditor(hit.beatId);
+    },
+    [toScorePoint, laid, props, openLyricEditor],
+  );
+
+  const handleDoubleClick = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (!props.onSelectLyric) return;
+      const { x, y } = toScorePoint(event);
+      const hit = hitTestScore(laid, x, y);
+      if (hit === null || hit.kind !== 'lyric') return;
+      openLyricEditor(hit.beatId);
     },
     [toScorePoint, laid, props],
   );
@@ -96,6 +121,7 @@ export function SolfaCanvas(props: SolfaCanvasProps): JSX.Element {
         props.onHoverNote?.(null);
       }}
       onPointerDown={handleClick}
+      onDoubleClick={handleDoubleClick}
     />
   );
 }
@@ -116,7 +142,7 @@ export function SolfaText(props: SolfaTextProps): JSX.Element {
     const host = hostRef.current;
     if (!host) return;
     const handle = createSolfaEditor(host, {
-      doc: createEditorState(latest.current.text),
+      text: latest.current.text,
       onChange: (text, coalesceKey) => {
         latest.current.onTextChange(text, coalesceKey);
       },

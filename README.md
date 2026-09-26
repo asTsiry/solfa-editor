@@ -67,6 +67,22 @@ Lyrics syllables are matched to beats in order, and the counts must agree, so
 whose short name collides with a lyrics alias (`P:`, for instance) wins: the
 parser prefers declared parts.
 
+### Title and subtitle
+
+`:title=` and `:subtitle=` set the heading. Unlike the other directives their
+value runs to the end of the line, because a title is prose:
+
+```
+:title=Ave Maria
+:subtitle=pour chœur à quatre voix
+```
+
+The title is engraved once, centred above the first system, and the subtitle
+sits under it in italics. A score with neither reserves no space for them. Above
+the engraving there is an input on the title itself and a `+ Sous-titre` button
+that reveals a second one, so the heading is typed straight onto the page; both
+write a directive into the text, which means undo works like everywhere else.
+
 ### Parts
 
 Voices are user-definable. `:parts=` takes a comma-separated list of
@@ -129,6 +145,48 @@ The two views never write to each other directly. CodeMirror reports text
 changes as `text/set`; the canvas reports pointer hits as commands. Each surface
 ignores updates that originate from itself, so there is no feedback loop.
 
+The panel is a full CodeMirror instance: line numbers, syntax highlighting for
+directives, voice labels, notes, lyrics and errors, closing brackets, and
+autocompletion from the note table and the two spaces. `createEditorState` is
+gone on purpose. `EditorView` resolves its own `extensions` option only when no
+`state` is supplied, so passing both would silently drop the update listener and
+the language support along with it. The extensions are built into the state in
+`createSolfaEditor`, and `textPanel.test.tsx` asserts the gutter and the syntax
+tree so this cannot regress unnoticed.
+
+### Editing
+
+Typing in the text panel is immediate: every keystroke is parsed and the
+engraving is redrawn. A run of adjacent single-character edits shares one undo
+step, so a mistyped word is taken back with a single Ctrl/Cmd + Z, while a paste
+or any wider edit stays its own step. The run window slides with the caret, which
+is what lets the letters of a word coalesce even though each keystroke lands at a
+new offset; the key of the first edit is what the document compares against.
+
+The heading at the top of the engraving is editable in place, and the `+
+Sous-titre` button next to it adds or removes the second line.
+
+Clicking a note in the engraving selects it. From there, the selection is edited
+either with the keyboard or with the button row under the score, so the same
+actions work with a mouse, a touch screen, or a keyboard:
+
+| Action | Keyboard | Button |
+| --- | --- | --- |
+| raise or lower by a degree | `↑` / `↓` | `▲` / `▼` |
+| raise or lower by an octave | `Shift` + `↑` / `↓` | `▲8` / `▼8` |
+| accidental | — | `♯` `♭` `♮`, or `♯ ♭ ♮` to cycle |
+| silence a voice on that beat | — | `𝄽` |
+
+`𝄽` writes a `0` in the text for that voice and beat, leaving the shared rhythm
+and the other voices untouched, so a rest never changes the bar. A rest cannot be
+clicked, so bringing a voice back in is done in the text panel; the voice then
+picks up the pitch it sang just before, so a stray rest never scrambles the
+contour.
+
+A syllable is edited in place: click it under the staff, type, then press `Enter`
+or click away to confirm, or `Escape` to cancel. The toolbar's **Parole** button
+does the same for the selected note.
+
 ## Development
 
 Requires Node 22+ and pnpm 12. A Rust toolchain is needed only for the desktop
@@ -170,5 +228,6 @@ dependencies (`webkit2gtk-4.1` and `libgtk-3-dev` on Linux).
 
 Not yet: audio playback, SMuFL/Bravura glyph fonts (engraving currently uses
 system serif fonts), rhythmic noteheads on the staff, clefs drawn on the staff,
-lyric editing by canvas double-click, file open/save through the Tauri
-filesystem dialogs, and note editing by keyboard on the canvas.
+editing the rhythm from the score rather than the text, bringing a rest back
+from the canvas, file open/save through the Tauri filesystem dialogs, and canvas
+note editing by drag.

@@ -8,9 +8,11 @@ export type HelpDialogProps = {
 };
 
 const SHORTCUTS: readonly [string, string][] = [
+  ['↑ / ↓', 'Monter ou descendre la note sélectionnée d’un degré'],
+  ['Maj + ↑ / ↓', 'Monter ou descendre la note sélectionnée d’une octave'],
   ['Ctrl/Cmd + Z', 'Annuler la dernière modification'],
   ['Ctrl/Cmd + Maj + Z', 'Rétablir la modification annulée'],
-  ['Échap', 'Fermer cette fenêtre'],
+  ['Échap', 'Fermer cette fenêtre ou annuler la syllabe en cours'],
   ['Tab', 'Passer au champ suivant'],
 ];
 
@@ -40,6 +42,20 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
         <p>
           Le solfège est <em>mobile</em> : le nom d&apos;une note dépend de la
           tonalité, et <code>d</code> est toujours la tonique.
+        </p>
+
+        <h3>Le titre</h3>
+        <p>
+          <code>:title=</code> et <code>:subtitle=</code> écrivent l&apos;en-tête de
+          la partition. Leur valeur va jusqu&apos;à la fin de la ligne, car un
+          titre est un texte : <code>:title=Ave Maria</code>.
+        </p>
+        <p>
+          Le titre est gravé une seule fois, centré au-dessus du premier système,
+          et le sous-titre se place dessous en italique. Au-dessus de la
+          partition, un champ permet de taper le titre directement sur la
+          partition, et le bouton <code>+ Sous-titre</code> ajoute ou retire la
+          deuxième ligne.
         </p>
 
         <h3>Les voix</h3>
@@ -208,6 +224,8 @@ export function HelpDialog(props: HelpDialogProps): JSX.Element {
         <h3>Exemple</h3>
         <pre className="solfa-help-code">{`// Chœur à quatre voix
 :do=C
+:title=Ave Maria
+:subtitle=pour chœur à quatre voix
 :parts=Soprano:S:treble,Alto:A:alto,Tenor:T:treble8vb,Bass:B:bass
 |
 S: d! r m f s l t
@@ -228,6 +246,22 @@ P: Se_ glori fi ca ve unt`}</pre>
           nouvelle syllabe, ce qui allonge la syllabe précédente.
         </p>
 
+        <h3>Modifier une note</h3>
+        <p>
+          Cliquer sur une note gravée la sélectionne. La rangée de boutons sous la
+          partition agit alors dessus : <code>▲</code> <code>▼</code> pour monter
+          ou descendre d&apos;un degré, <code>▲8</code> <code>▼8</code> pour une
+          octave, <code>♯</code> <code>♭</code> <code>♮</code> pour
+          l&apos;altération (le bouton <code>♯ ♭ ♮</code> les fait défiler), et{' '}
+          <strong>Parole</strong> pour écrire la syllabe. Les flèches du clavier
+          font de même, avec <kbd>Maj</kbd> pour les octaves.
+        </p>
+        <p>
+          Une syllabe se modifie directement sous la portée : cliquez-la, saisissez
+          le texte, puis validez avec <kbd>Entrée</kbd> ou en cliquant ailleurs.
+          <kbd>Échap</kbd> annule la saisie.
+        </p>
+
         <h3>Les boutons</h3>
         <ul>
           <li>
@@ -235,7 +269,8 @@ P: Se_ glori fi ca ve unt`}</pre>
           </li>
           <li>
             <strong>Annuler</strong> / <strong>Rétablir</strong> : annulation et
-            rétablissement, valables pour les deux vues.
+            rétablissement, valables pour les deux vues. Un mot tapé au clavier
+            s&rsquo;annule en une seule fois ; un collage reste une étape à part.
           </li>
           <li>
             <strong>Enregistrer</strong> : ouvre cette fenêtre pour produire un PDF

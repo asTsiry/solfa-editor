@@ -6,14 +6,17 @@ import {
   findVoiceNote,
   iterateVoiceNotes,
   partOf,
+  nearestNoteOfPart,
   voiceNotesOf,
   withBeat,
+  withBeatNote,
   withSectionKey,
   withVoiceNote,
   DEFAULT_PARTS,
   type Beat,
   type Key,
   type ParseError,
+  type PartId,
   type Score,
   type Span,
   type VoiceNote,
@@ -47,8 +50,15 @@ export type Command =
     }
   | { readonly type: 'beat/setPulses'; readonly beatId: string; readonly pulses: number }
   | { readonly type: 'lyric/set'; readonly beatId: string; readonly lyric: string | null }
+  | {
+      readonly type: 'voice/setRest';
+      readonly beatId: string;
+      readonly partId: PartId;
+      readonly rest: boolean;
+    }
   | { readonly type: 'note/select'; readonly noteIds: readonly string[] }
   | { readonly type: 'note/step'; readonly noteId: string; readonly delta: number }
+  | { readonly type: 'title/set'; readonly field: 'title' | 'subtitle'; readonly value: string | null }
   | { readonly type: 'key/set'; readonly key: Key }
   | { readonly type: 'parts/set'; readonly parts: Score['parts'] }
   | { readonly type: 'history/undo' }
@@ -58,7 +68,13 @@ type HistoryEntry = { text: string; coalesceKey: string | null };
 
 const HISTORY_LIMIT = 200;
 
-const EMPTY_SCORE: Score = { kind: 'score', parts: DEFAULT_PARTS, sections: [] };
+const EMPTY_SCORE: Score = {
+  kind: 'score',
+  title: null,
+  subtitle: null,
+  parts: DEFAULT_PARTS,
+  sections: [],
+};
 
 const BOOTSTRAP_STATE: DocumentState = {
   text: '',
@@ -74,6 +90,11 @@ const BOOTSTRAP_STATE: DocumentState = {
 
 export class SolfaDocument {
   private state: DocumentState = BOOTSTRAP_STATE;
+  private idCounter = 0;
+  private nextId = (): string => {
+    this.idCounter += 1;
+    return `e${this.idCounter.toString(36)}`;
+  };
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   private listeners = new Set<() => void>();
@@ -135,7 +156,7 @@ export class SolfaDocument {
     };
   }
 
-  private commitScore(score: Score, selectNoteId?: string): DocumentState {
+  private commitScore(score: Score, selectNoteId?: string | null): DocumentState {
     const { text, spans } = serialize(score);
     this.pushHistory(this.state.text, null);
     return {
@@ -144,7 +165,14 @@ export class SolfaDocument {
       spans,
       errors: [],
       valid: true,
-      selection: { noteIds: selectNoteId ? [selectNoteId] : this.state.selection.noteIds },
+      selection: {
+        noteIds:
+          selectNoteId === null
+            ? []
+            : selectNoteId
+              ? [selectNoteId]
+              : this.state.selection.noteIds,
+      },
       canUndo: this.undoStack.length > 0,
       canRedo: this.redoStack.length > 0,
       revision: this.state.revision + 1,
@@ -204,6 +232,13 @@ export class SolfaDocument {
         return this.commitScore(score);
       }
 
+      case 'title/set': {
+        const value = command.value === null || command.value.trim() === '' ? null : command.value.trim();
+        if (state.score[command.field] === value) return state;
+        const score: Score = { ...state.score, [command.field]: value };
+        return this.commitScore(score);
+      }
+
       case 'key/set': {
         const section = state.score.sections[0];
         if (!section) return state;
@@ -217,6 +252,34 @@ export class SolfaDocument {
         const score = reconcileScore(state.score, { ...state.score, parts: command.parts });
         if (serializePartsEqual(score, state.score)) return state;
         return this.commitScore(score);
+      }
+
+      case 'voice/setRest': {
+        const beat = findBeat(state.score, command.beatId);
+        if (!beat) return state;
+        const partIndex = state.score.parts.findIndex((part) => part.id === command.partId);
+        if (partIndex < 0) return state;
+        const current = beat.notes[partIndex] ?? null;
+
+        if (command.rest) {
+          if (current === null) return state;
+          const silenced = this.state.selection.noteIds.includes(current.id);
+          return this.commitScore(
+            withBeatNote(state.score, beat.id, command.partId, null),
+            silenced ? null : undefined,
+          );
+        }
+        if (current !== null) return state;
+
+        const previous = nearestNoteOfPart(state.score, beat.id, command.partId);
+        const restored: VoiceNote = {
+          kind: 'voiceNote',
+          id: this.nextId(),
+          partId: command.partId,
+          degree: previous?.degree ?? 0,
+          accidental: previous?.accidental ?? 0,
+        };
+        return this.commitScore(withBeatNote(state.score, beat.id, command.partId, restored), restored.id);
       }
 
       case 'note/select': {
@@ -259,6 +322,10 @@ export class SolfaDocument {
 
   findNote(noteId: string): VoiceNote | undefined {
     return findVoiceNote(this.state.score, noteId);
+  }
+
+  findBeat(beatId: string): Beat | undefined {
+    return findBeat(this.state.score, beatId);
   }
 
   beatOfNote(noteId: string): Beat | undefined {

@@ -448,3 +448,56 @@ describe('serialize', () => {
     );
   });
 });
+
+describe('title and subtitle', () => {
+  const NOTES = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t'].join('\n');
+
+  it('reads a title with spaces', () => {
+    const result = parse(':title=Ave Maria\n:subtitle=à laBlessed Virgin');
+    expect(result.errors).toHaveLength(0);
+    expect(result.score.title).toBe('Ave Maria');
+    expect(result.score.subtitle).toBe('à laBlessed Virgin');
+  });
+
+  it('defaults to no title', () => {
+    expect(parse(NOTES).score.title).toBeNull();
+    expect(parse(NOTES).score.subtitle).toBeNull();
+  });
+
+  it('treats an empty value as no title', () => {
+    const result = parse(':title=\n:subtitle=');
+    expect(result.errors).toHaveLength(0);
+    expect(result.score.title).toBeNull();
+    expect(result.score.subtitle).toBeNull();
+  });
+
+  it('lets a later title win', () => {
+    expect(parse(':title=One\n:title=Two').score.title).toBe('Two');
+  });
+
+  it('stops the value at the end of the line', () => {
+    const result = parse(':title=Ave Maria\n|');
+    expect(result.errors).toHaveLength(0);
+    expect(result.score.title).toBe('Ave Maria');
+  });
+
+  it('round-trips through the serializer', () => {
+    const source = `:title=Ave Maria\n:subtitle=Cordes\n${NOTES}`;
+    const first = parse(source);
+    expect(first.errors).toHaveLength(0);
+    const text = serialize(first.score).text;
+    expect(text).toContain(':title=Ave Maria');
+    expect(text).toContain(':subtitle=Cordes');
+    const second = parse(text);
+    expect(second.errors).toHaveLength(0);
+    expect(second.score.title).toBe('Ave Maria');
+    expect(second.score.subtitle).toBe('Cordes');
+  });
+
+  it('omits both when absent', () => {
+    const result = parse(NOTES);
+    const text = serialize(result.score).text;
+    expect(text).not.toContain(':title');
+    expect(text).not.toContain(':subtitle');
+  });
+});

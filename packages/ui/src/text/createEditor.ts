@@ -18,7 +18,7 @@ function baseExtensions(): Extension[] {
 }
 
 export type SolfaEditorOptions = {
-  readonly doc: EditorState;
+  readonly text: string;
   readonly onChange: (text: string, coalesceKey: string | null) => void;
   readonly placeholder?: string | undefined;
 };
@@ -27,7 +27,6 @@ type TypingRun = {
   readonly key: string;
   readonly from: number;
   readonly to: number;
-  readonly length: number;
 };
 
 type SingleChange = { readonly from: number; readonly to: number; readonly insert: string };
@@ -51,20 +50,27 @@ function isTypingChange(changes: ChangeSet, previous: TypingRun | null): TypingR
   const isSingleDelete = change.insert.length === 0 && change.to - change.from === 1;
   if (!isSingleInsert && !isSingleDelete) return null;
 
+  // A run continues while each edit is a single character adjacent to the window
+  // the run has covered so far, in either direction, so a word typed in one go (or
+  // typed then corrected) is one undo step. The window slides as the caret moves,
+  // and the key of the first edit is kept, because the document skips pushing
+  // history while the key still matches the top entry.
   if (
     previous !== null &&
-    previous.length === changes.newLength &&
-    Math.abs(previous.to - change.from) <= 1 &&
-    Math.abs(previous.from - change.to) <= 1
+    change.from - previous.to <= 1 &&
+    previous.from - change.to <= 1
   ) {
-    return previous;
+    return {
+      key: previous.key,
+      from: Math.min(previous.from, change.from),
+      to: Math.max(previous.to, change.to),
+    };
   }
 
   return {
     key: `typing:${changes.newLength}:${change.from}`,
     from: change.from,
     to: change.to,
-    length: changes.newLength,
   };
 }
 
@@ -73,24 +79,31 @@ export type SolfaEditorHandle = {
   syncFromDocument: (text: string) => void;
 };
 
-export function createSolfaEditor(parent: HTMLElement, options: SolfaEditorOptions): SolfaEditorHandle {
+export function createSolfaEditor(
+  parent: HTMLElement,
+  options: SolfaEditorOptions,
+): SolfaEditorHandle {
   let run: TypingRun | null = null;
   let applyingExternal = false;
 
-  const view = new EditorView({
-    parent,
-    state: options.doc,
+  // The extensions must go into the state itself: EditorView ignores its own
+  // `extensions` option whenever a `state` is supplied, which would silently cost
+  // the update listener, the highlighting and the line numbers.
+  const state = EditorState.create({
+    doc: options.text,
     extensions: [
       ...baseExtensions(),
+      placeholder(options.placeholder ?? 'd r m f s l t'),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return;
         if (applyingExternal) return;
         run = isTypingChange(update.changes, run);
         options.onChange(update.state.doc.toString(), run?.key ?? null);
       }),
-      placeholder(options.placeholder ?? 'd r m f s l t'),
     ],
   });
+
+  const view = new EditorView({ parent, state });
 
   const syncFromDocument = (text: string): void => {
     const current = view.state.doc.toString();
@@ -104,8 +117,4 @@ export function createSolfaEditor(parent: HTMLElement, options: SolfaEditorOptio
   };
 
   return { view, syncFromDocument };
-}
-
-export function createEditorState(text: string): EditorState {
-  return EditorState.create({ doc: text });
 }

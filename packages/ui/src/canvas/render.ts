@@ -47,8 +47,13 @@ function isLabelRole(role: GlyphRole): boolean {
   );
 }
 
+function isCentredRole(role: GlyphRole): boolean {
+  return role === 'lyric' || role === 'title' || role === 'subtitle';
+}
+
 function glyphFont(item: Extract<DisplayItem, { kind: 'glyph' }>): string {
   if (item.role === 'lyric') return LYRIC_FONT;
+  if (item.role === 'subtitle') return `italic ${item.fontSize}px ${NOTE_FONT_FAMILY}`;
   if (isLabelRole(item.role)) return LABEL_FONT;
   return `600 ${item.fontSize}px ${NOTE_FONT_FAMILY}`;
 }
@@ -77,7 +82,7 @@ function paintItem(
   }
 
   context.font = glyphFont(item);
-  context.textAlign = item.role === 'lyric' ? 'center' : 'left';
+  context.textAlign = isCentredRole(item.role) ? 'center' : 'left';
   context.textBaseline = 'alphabetic';
   context.fillStyle =
     isLabelRole(item.role)

@@ -11,6 +11,8 @@ const SECTION_HEADER = /^\|[',]*[drmfslt]:m?/;
 const NUMBERED_SECTION = /^\|\d+[:.]/;
 const DIRECTIVE = /^:[A-Za-z]+=([A-Za-z][A-Za-z#b]*)?/;
 const PARTS_DIRECTIVE = /^:parts=[^\n]*/;
+// A title is prose, so its value runs to the end of the line like the parser reads it.
+const HEADING_NAME = /^:(?:title|subtitle)=/;
 const PARTS_NAME = /^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ0-9 _'-]*/;
 const VOICE_LABEL = /^([A-Za-z][A-Za-z0-9]*)\s*:(?=\s|$)/;
 const LYRIC_ALIASES = new Set(['p', 'paroles', 'parole', 'lyric', 'lyrics', 'words', 'text']);
@@ -18,7 +20,11 @@ const LYRIC_ALIASES = new Set(['p', 'paroles', 'parole', 'lyric', 'lyrics', 'wor
 export const SOLFA_LYRICS_ALIASES = [...LYRIC_ALIASES];
 export const SOLFA_CLEFS = ['treble', 'alto', 'tenor', 'treble8vb', 'bass'] as const;
 
-type SolfaStreamState = { readonly directive: string | null };
+type SolfaStreamState = {
+  readonly directive: string | null;
+  /** Set after a `:title=` or `:subtitle=`, so the prose is read as text. */
+  inHeadingValue: boolean;
+};
 
 function isLyricLabel(label: string): boolean {
   return LYRIC_ALIASES.has(label.toLowerCase());
@@ -26,9 +32,16 @@ function isLyricLabel(label: string): boolean {
 
 const solfaParser: StreamParser<SolfaStreamState> = {
   name: 'solfa',
-  startState: (): SolfaStreamState => ({ directive: null }),
+  startState: (): SolfaStreamState => ({ directive: null, inHeadingValue: false }),
 
-  token(stream): string | null {
+  token(stream, state): string | null {
+    if (state.inHeadingValue) {
+      const before = stream.pos;
+      stream.skipToEnd();
+      state.inHeadingValue = false;
+      return stream.pos > before ? 'string' : null;
+    }
+
     if (stream.eat(/^\s+/)) return null;
 
     if (stream.match('//')) {
@@ -47,6 +60,11 @@ const solfaParser: StreamParser<SolfaStreamState> = {
     if (stream.match('|')) return 'separator';
 
     if (stream.match(PARTS_DIRECTIVE)) return 'attributeName';
+
+    if (stream.match(HEADING_NAME)) {
+      state.inHeadingValue = true;
+      return 'attributeName';
+    }
 
     if (stream.match(DIRECTIVE)) {
       const text = stream.current();

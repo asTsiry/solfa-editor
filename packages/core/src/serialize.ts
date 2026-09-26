@@ -106,6 +106,8 @@ export function serialize(score: Score, options: SerializeOptions = {}): Seriali
   const parts = score.parts.length > 0 ? score.parts : DEFAULT_PARTS;
   const first = score.sections[0];
 
+  if (score.title !== null) write(`:title=${score.title}\n`);
+  if (score.subtitle !== null) write(`:subtitle=${score.subtitle}\n`);
   if (first && !keysEqual(first.key, DEFAULT_KEY)) {
     for (const line of keyDirectives(first.key)) write(`${line}\n`);
   }

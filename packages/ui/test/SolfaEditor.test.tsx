@@ -1,8 +1,29 @@
-import { SolfaDocument, voiceNotesOf } from '@solfa/core';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import {
+  DEFAULT_LAYOUT,
+  textBox,
+  layout,
+  SolfaDocument,
+  voiceNotesOf,
+  type DisplayGlyph,
+} from '@solfa/core';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { JSX } from 'react';
 import { SolfaEditor } from '../src/SolfaEditor.js';
+
+function screenButtonByTitle(startsWith: string): HTMLButtonElement {
+  const button = document.querySelector(`[title^="${startsWith}"]`);
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`no button titled ${startsWith}`);
+  return button;
+}
+
+function screenUpButton(): HTMLButtonElement {
+  return screenButtonByTitle('Monter d’un degré');
+}
+
+function screenDownButton(): HTMLButtonElement {
+  return screenButtonByTitle('Descendre d’un degré');
+}
 
 afterEach(cleanup);
 
@@ -18,6 +39,17 @@ function editorText(): string {
 
 function errorCount(): number {
   return document.querySelectorAll('.solfa-editor-errors li').length;
+}
+
+function lyricGlyphs(laid: { items: readonly unknown[] }): DisplayGlyph[] {
+  return (laid.items as readonly DisplayGlyph[]).filter(
+    (item) => item.kind === 'glyph' && item.role === 'lyric',
+  );
+}
+
+function degreeOf(doc: SolfaDocument, partId: string, index = 0): number | null {
+  const notes = voiceNotesOf(doc.getState().score).filter((note) => note.partId === partId);
+  return notes[index]?.degree ?? null;
 }
 
 function noteOf(doc: SolfaDocument, partId: string, index = 0) {
@@ -109,5 +141,394 @@ describe('SolfaEditor', () => {
     render(<Harness document={doc} />);
     doc.dispatch({ type: 'text/set', text: '|\nS: s l t d\nA: l t d r\nT: t d r m\nB: d r m f' });
     await waitFor(() => expect(editorText()).toContain('S: s l t d'));
+  });
+});
+
+describe('SolfaEditor: note controls', () => {
+  function selectNote(doc: SolfaDocument, partId: string, index = 0) {
+    const note = noteOf(doc, partId, index);
+    act(() => {
+      doc.dispatch({ type: 'note/select', noteIds: [note!.id] });
+    });
+    return note!;
+  }
+
+  it('disables the note buttons until a note is selected', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const buttons = document.querySelectorAll('.solfa-toolbar-button');
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of Array.from(buttons)) expect(button.disabled).toBe(true);
+  });
+
+  it('raises the selected note with the up button', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    expect(degreeOf(doc, 'alto')).toBe(1);
+    selectNote(doc, 'alto');
+    fireEvent.click(screenUpButton());
+    expect(degreeOf(doc, 'alto')).toBe(2);
+    expect(doc.getState().text).toContain('A: m ~ f s');
+  });
+
+  it('lowers the selected note with the down button', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    expect(degreeOf(doc, 'alto')).toBe(1);
+    selectNote(doc, 'alto');
+    fireEvent.click(screenDownButton());
+    expect(degreeOf(doc, 'alto')).toBe(0);
+    expect(doc.getState().text).toContain('A: d m f s');
+  });
+
+  it('shifts the selected note by an octave', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    expect(degreeOf(doc, 'bass')).toBe(3);
+    selectNote(doc, 'bass');
+    fireEvent.click(screenButtonByTitle('Monter d’une octave'));
+    expect(degreeOf(doc, 'bass')).toBe(10);
+  });
+
+  it('adds and clears an accidental', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'tenor');
+    fireEvent.click(screenButtonByTitle('Rendre cette note dièse'));
+    expect(doc.getState().text).toContain('T: m# f s l');
+    fireEvent.click(screenButtonByTitle('Enlever l’altération'));
+    expect(doc.getState().text).toContain('T: m f s l');
+  });
+
+  it('silences the selected voice on that beat', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'bass', 1);
+    fireEvent.click(screenButtonByTitle('Faire taire cette voix'));
+    expect(doc.getState().text).toContain('B: f 0 l t');
+    expect(degreeOf(doc, 'alto', 1)).toBe(2);
+  });
+
+  it('drops the toolbar when the selected note is silenced', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'bass', 1);
+    fireEvent.click(screenButtonByTitle('Faire taire cette voix'));
+    expect(screenUpButton().disabled).toBe(true);
+    expect(doc.getState().selection.noteIds).toEqual([]);
+  });
+
+  it('keeps the rhythm when the top voice is silenced by the button', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'soprano', 0);
+    fireEvent.click(screenButtonByTitle('Faire taire cette voix'));
+    expect(doc.getState().text).toContain('S: 0 r m f');
+    expect(doc.getState().valid).toBe(true);
+  });
+
+  it('opens the inline editor by clicking the syllable itself', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const laid = layout(doc.getState().score, doc.getState().spans, DEFAULT_LAYOUT);
+    const glyph = lyricGlyphs(laid)[0]!;
+    const box = textBox(glyph);
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+
+    fireEvent.pointerDown(canvas, { clientX: box.centerX, clientY: box.centerY });
+
+    const input = document.querySelector('[data-testid="solfa-lyric-input"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('do');
+    // The field must sit on the syllable, not below it.
+    expect(input.style.left).toBe(`${box.centerX}px`);
+    expect(input.style.top).toBe(`${box.centerY}px`);
+    expect(input.style.fontSize).toBe(`${glyph.fontSize}px`);
+    // Clicking a word must not also select the voice underneath it.
+    expect(doc.getState().selection.noteIds).toEqual([]);
+  });
+
+  it('still selects a note when the click lands on the staff', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const laid = layout(doc.getState().score, doc.getState().spans, DEFAULT_LAYOUT);
+    const note = laid.notes[0]!;
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+
+    fireEvent.pointerDown(canvas, {
+      clientX: note.x + note.width / 2,
+      clientY: note.y + note.height / 2,
+    });
+
+    expect(doc.getState().selection.noteIds).toEqual([note.noteId]);
+    expect(document.querySelector('[data-testid="solfa-lyric-input"]')).toBeNull();
+  });
+
+  it('adds a syllable to a beat that has none by clicking the empty slot', () => {
+    const doc = new SolfaDocument(['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t', 'P: do _ _ _'].join('\n'));
+    render(<Harness document={doc} />);
+    const laid = layout(doc.getState().score, doc.getState().spans, DEFAULT_LAYOUT);
+    const slot = laid.items.find(
+      (item) => item.kind === 'glyph' && item.role === 'lyric' && item.code === '',
+    )!;
+    const box = textBox(slot);
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+
+    fireEvent.pointerDown(canvas, { clientX: box.centerX, clientY: box.centerY });
+    const input = document.querySelector('[data-testid="solfa-lyric-input"]') as HTMLInputElement;
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: 'la' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(doc.getState().text).toContain('P: do la _ _');
+  });
+
+  it('types the title into the heading and keeps it in the text', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const input = screen.getByTestId('solfa-title-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Ave Maria' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(doc.getState().score.title).toBe('Ave Maria');
+    expect(doc.getState().text).toContain(':title=Ave Maria');
+  });
+
+  it('commits the title on blur', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const input = screen.getByTestId('solfa-title-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Ave Maria' } });
+    fireEvent.blur(input);
+    expect(doc.getState().score.title).toBe('Ave Maria');
+  });
+
+  it('shows the existing title in the heading', () => {
+    const doc = new SolfaDocument(`:title=Ave Maria\n${CHOIR}`);
+    render(<Harness document={doc} />);
+    expect((screen.getByTestId('solfa-title-input') as HTMLInputElement).value).toBe('Ave Maria');
+  });
+
+  it('centres the heading on the page and on the engraved title', () => {
+    const doc = new SolfaDocument(`:title=Ave Maria\n${CHOIR}`);
+    const { container } = render(<Harness document={doc} />);
+    const laid = layout(doc.getState().score, doc.getState().spans, DEFAULT_LAYOUT);
+    const title = laid.items.find(
+      (item) => item.kind === 'glyph' && item.role === 'title',
+    )!;
+    const box = textBox(title);
+    const input = screen.getByTestId('solfa-title-input') as HTMLInputElement;
+    expect(input.style.left).toBe(`${box.centerX}px`);
+    expect(input.style.top).toBe(`${box.centerY}px`);
+    expect(input.style.fontSize).toBe(`${title.fontSize}px`);
+    expect(container.querySelector('.solfa-heading')).not.toBeNull();
+  });
+
+  it('hides the subtitle until the button asks for it', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    expect(screen.queryByTestId('solfa-subtitle-input')).toBeNull();
+    fireEvent.click(screen.getByTestId('solfa-add-subtitle'));
+    expect(screen.getByTestId('solfa-subtitle-input')).not.toBeNull();
+    // Still nothing written: the button only reveals the field.
+    expect(doc.getState().score.subtitle).toBeNull();
+  });
+
+  it('types a subtitle once revealed', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    fireEvent.click(screen.getByTestId('solfa-add-subtitle'));
+    const input = screen.getByTestId('solfa-subtitle-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Cordes' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(doc.getState().score.subtitle).toBe('Cordes');
+    expect(doc.getState().text).toContain(':subtitle=Cordes');
+  });
+
+  it('reveals a subtitle that the text already had', () => {
+    const doc = new SolfaDocument(`:subtitle=Cordes\n${CHOIR}`);
+    render(<Harness document={doc} />);
+    expect((screen.getByTestId('solfa-subtitle-input') as HTMLInputElement).value).toBe('Cordes');
+    expect(screen.queryByTestId('solfa-add-subtitle')).toBeNull();
+  });
+
+  it('removes the subtitle again', () => {
+    const doc = new SolfaDocument(`:title=Ave Maria\n:subtitle=Cordes\n${CHOIR}`);
+    render(<Harness document={doc} />);
+    fireEvent.click(screen.getByTestId('solfa-remove-subtitle'));
+    expect(doc.getState().score.subtitle).toBeNull();
+    expect(doc.getState().text).not.toContain(':subtitle');
+    expect(doc.getState().score.title).toBe('Ave Maria');
+  });
+
+  it('keeps a removed subtitle out of the way until asked again', () => {
+    const doc = new SolfaDocument(`:title=Ave Maria\n:subtitle=Cordes\n${CHOIR}`);
+    render(<Harness document={doc} />);
+    fireEvent.click(screen.getByTestId('solfa-remove-subtitle'));
+    expect(screen.queryByTestId('solfa-subtitle-input')).toBeNull();
+    fireEvent.click(screen.getByTestId('solfa-add-subtitle'));
+    expect((screen.getByTestId('solfa-subtitle-input') as HTMLInputElement).value).toBe('');
+  });
+
+  it('undoes a title typed in the heading', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const input = screen.getByTestId('solfa-title-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Ave Maria' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    act(() => {
+      doc.dispatch({ type: 'history/undo' });
+    });
+    expect(doc.getState().score.title).toBeNull();
+    expect((screen.getByTestId('solfa-title-input') as HTMLInputElement).value).toBe('');
+  });
+
+  it('leaves the note arrows alone while typing in the title', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'alto');
+    fireEvent.keyDown(screen.getByTestId('solfa-title-input'), { key: 'ArrowUp' });
+    expect(degreeOf(doc, 'alto')).toBe(1);
+  });
+
+  it('leaves the note arrows alone while typing in the subtitle', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'alto');
+    fireEvent.click(screen.getByTestId('solfa-add-subtitle'));
+    fireEvent.keyDown(screen.getByTestId('solfa-subtitle-input'), { key: 'ArrowUp' });
+    expect(degreeOf(doc, 'alto')).toBe(1);
+  });
+
+  it('leaves the note arrows alone while typing a syllable', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'alto');
+    fireEvent.click(screenButtonByTitle('Écrire la syllabe'));
+    fireEvent.keyDown(screen.getByTestId('solfa-lyric-input'), { key: 'ArrowUp' });
+    expect(degreeOf(doc, 'alto')).toBe(1);
+  });
+
+  it('cycles the accidental with the combined button', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'tenor');
+    fireEvent.click(screenButtonByTitle('Faire alterner'));
+    expect(doc.getState().text).toContain('T: m# f s l');
+    fireEvent.click(screenButtonByTitle('Faire alterner'));
+    expect(doc.getState().text).toContain('T: mb f s l');
+    fireEvent.click(screenButtonByTitle('Faire alterner'));
+    expect(doc.getState().text).toContain('T: m f s l');
+  });
+
+  it('moves the selected note with the arrow keys', () => {
+    const doc = new SolfaDocument(CHOIR);
+    const { container } = render(<Harness document={doc} />);
+    expect(degreeOf(doc, 'soprano', 3)).toBe(3);
+    selectNote(doc, 'soprano', 3);
+    const stage = container.querySelector('.solfa-editor-canvas') as HTMLElement;
+    stage.focus();
+    fireEvent.keyDown(stage, { key: 'ArrowUp' });
+    expect(degreeOf(doc, 'soprano', 3)).toBe(4);
+
+    fireEvent.keyDown(stage, { key: 'ArrowDown' });
+    expect(degreeOf(doc, 'soprano', 3)).toBe(3);
+  });
+
+  it('moves the selected note by an octave with shift and the arrow keys', () => {
+    const doc = new SolfaDocument(CHOIR);
+    const { container } = render(<Harness document={doc} />);
+    selectNote(doc, 'soprano', 3);
+    const stage = container.querySelector('.solfa-editor-canvas') as HTMLElement;
+    stage.focus();
+    fireEvent.keyDown(stage, { key: 'ArrowUp', shiftKey: true });
+    expect(degreeOf(doc, 'soprano', 3)).toBe(10);
+  });
+
+  it('ignores arrow keys while typing in the text surface', () => {
+    const doc = new SolfaDocument(CHOIR);
+    const { container } = render(<Harness document={doc} />);
+    selectNote(doc, 'soprano', 3);
+    const before = doc.getState().text;
+    const content = container.querySelector('.cm-content') as HTMLElement;
+    fireEvent.keyDown(content, { key: 'ArrowUp' });
+    expect(doc.getState().text).toBe(before);
+  });
+
+  it('undoes a button edit with a single step', () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    selectNote(doc, 'alto');
+    fireEvent.click(screenUpButton());
+    expect(degreeOf(doc, 'alto')).toBe(2);
+    doc.dispatch({ type: 'history/undo' });
+    expect(doc.getState().text).toBe(CHOIR);
+    expect(degreeOf(doc, 'alto')).toBe(1);
+  });
+});
+
+describe('SolfaEditor: lyrics', () => {
+  it('opens an inline field from the toolbar and writes the syllable', async () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const note = noteOf(doc, 'soprano', 1)!;
+    act(() => {
+      doc.dispatch({ type: 'note/select', noteIds: [note.id] });
+    });
+
+    fireEvent.click(screenButtonByTitle('Écrire la syllabe'));
+    const input = await screen.findByTestId('solfa-lyric-input');
+    fireEvent.change(input, { target: { value: 'Ma' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(doc.getState().text).toContain('P: do Ma mi fa'));
+  });
+
+  it('confirms on blur', async () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const note = noteOf(doc, 'soprano', 1)!;
+    act(() => {
+      doc.dispatch({ type: 'note/select', noteIds: [note.id] });
+    });
+
+    fireEvent.click(screenButtonByTitle('Écrire la syllabe'));
+    const input = await screen.findByTestId('solfa-lyric-input');
+    fireEvent.change(input, { target: { value: 'Ma' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(doc.getState().text).toContain('P: do Ma mi fa'));
+  });
+
+  it('discards the edit on escape', async () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const note = noteOf(doc, 'soprano', 1)!;
+    act(() => {
+      doc.dispatch({ type: 'note/select', noteIds: [note.id] });
+    });
+
+    fireEvent.click(screenButtonByTitle('Écrire la syllabe'));
+    const input = await screen.findByTestId('solfa-lyric-input');
+    fireEvent.change(input, { target: { value: 'zzz' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByTestId('solfa-lyric-input')).toBeNull());
+    expect(doc.getState().text).toBe(CHOIR);
+  });
+
+  it('clears a syllable when the field is emptied', async () => {
+    const doc = new SolfaDocument(CHOIR);
+    render(<Harness document={doc} />);
+    const note = noteOf(doc, 'soprano', 0)!;
+    act(() => {
+      doc.dispatch({ type: 'note/select', noteIds: [note.id] });
+    });
+
+    fireEvent.click(screenButtonByTitle('Écrire la syllabe'));
+    const input = await screen.findByTestId('solfa-lyric-input');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(doc.getState().text).toContain('P: _ re mi fa'));
   });
 });
