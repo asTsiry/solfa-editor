@@ -8,9 +8,21 @@ export const SOLFA_MODES = ['major', 'minor'] as const;
 const LETTER_SET = new Set<string>(SOLFA_LETTERS);
 const PITCH_NAME = /^[A-Ga-g][#b]*$/;
 const SECTION_HEADER = /^\|[',]*[drmfslt]:m?/;
+const NUMBERED_SECTION = /^\|\d+[:.]/;
 const DIRECTIVE = /^:[A-Za-z]+=([A-Za-z][A-Za-z#b]*)?/;
+const PARTS_DIRECTIVE = /^:parts=[^\n]*/;
+const PARTS_NAME = /^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ0-9 _'-]*/;
+const VOICE_LABEL = /^([A-Za-z][A-Za-z0-9]*)\s*:(?=\s|$)/;
+const LYRIC_ALIASES = new Set(['p', 'paroles', 'parole', 'lyric', 'lyrics', 'words', 'text']);
+
+export const SOLFA_LYRICS_ALIASES = [...LYRIC_ALIASES];
+export const SOLFA_CLEFS = ['treble', 'alto', 'tenor', 'treble8vb', 'bass'] as const;
 
 type SolfaStreamState = { readonly directive: string | null };
+
+function isLyricLabel(label: string): boolean {
+  return LYRIC_ALIASES.has(label.toLowerCase());
+}
 
 const solfaParser: StreamParser<SolfaStreamState> = {
   name: 'solfa',
@@ -24,9 +36,17 @@ const solfaParser: StreamParser<SolfaStreamState> = {
       return 'comment';
     }
 
+    if (stream.sol()) {
+      if (stream.match(NUMBERED_SECTION)) return 'heading';
+      const label = stream.match(VOICE_LABEL) as RegExpMatchArray | null;
+      if (label) return isLyricLabel(label[1] ?? '') ? 'string' : 'labelName';
+    }
+
     if (stream.match(SECTION_HEADER)) return 'heading';
 
     if (stream.match('|')) return 'separator';
+
+    if (stream.match(PARTS_DIRECTIVE)) return 'attributeName';
 
     if (stream.match(DIRECTIVE)) {
       const text = stream.current();
@@ -40,6 +60,8 @@ const solfaParser: StreamParser<SolfaStreamState> = {
       return 'invalid';
     }
 
+    if (stream.match('~')) return 'null';
+
     if (stream.match(/^[,']+/)) {
       return stream.current().includes("'") ? 'atom' : 'modifier';
     }
@@ -52,7 +74,9 @@ const solfaParser: StreamParser<SolfaStreamState> = {
       return 'modifier';
     }
 
-    if (stream.match(/^[0-9]+/)) return 'number';
+    if (stream.match(/^0+/)) return 'null';
+
+    if (stream.match(/^[1-9][0-9]*/)) return 'number';
 
     const letter = stream.peek();
     if (letter !== undefined && LETTER_SET.has(letter)) {
@@ -89,6 +113,10 @@ export const solfaHighlightStyle = HighlightStyle.define([
   { tag: tags.separator, color: 'var(--solfa-bar)' },
   { tag: tags.heading, color: 'var(--solfa-key)', fontWeight: '700' },
   { tag: tags.number, color: 'var(--solfa-muted)' },
+  { tag: tags.null, color: 'var(--solfa-muted)', fontStyle: 'italic' },
+  { tag: tags.labelName, color: 'var(--solfa-key)', fontWeight: '700' },
+  { tag: tags.string, color: 'var(--solfa-note)', fontStyle: 'italic' },
+  { tag: tags.attributeName, color: 'var(--solfa-muted)' },
   { tag: tags.invalid, color: 'var(--solfa-error)' },
 ]);
 

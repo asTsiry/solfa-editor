@@ -1,4 +1,4 @@
-import { describeNote, type LayoutOptions, type SolfaDocument } from '@solfa/core';
+import { describeVoiceNote, type LayoutOptions, type SolfaDocument } from '@solfa/core';
 import { useCallback, useMemo } from 'react';
 import type { JSX } from 'react';
 import { SolfaCanvas, SolfaText } from './SolfaSurfaces.js';
@@ -42,7 +42,7 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
     if (state.selection.noteIds.length !== 1) return null;
     const note = document.findNote(state.selection.noteIds[0] ?? '');
     if (!note) return null;
-    return describeNote(state.score, note);
+    return describeVoiceNote(state.score, document.partOfNote(note.id), note);
   }, [document, state.selection.noteIds, state.score]);
 
   return (
@@ -61,7 +61,7 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
         <SolfaText
           text={state.text}
           onTextChange={handleTextChange}
-          placeholder={props.placeholder ?? 'd r m f s l t'}
+          placeholder={props.placeholder ?? '|\nS: d r m f s l t\nA: r m f s l d\nT: m f s l d r\nB: f s l d r m\nP: do re mi fa'}
         />
         <div className="solfa-editor-status" data-valid={state.valid}>
           {state.errors.length > 0 ? (
@@ -71,7 +71,10 @@ export function SolfaEditor(props: SolfaEditorProps): JSX.Element {
               ))}
             </ul>
           ) : (
-            <span>{selectionLabel ?? `${state.score.sections.length} section(s)`}</span>
+            <span>
+              {selectionLabel ??
+                `${state.score.parts.length} voix - ${state.score.sections.length} section(s)`}
+            </span>
           )}
         </div>
       </div>

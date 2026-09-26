@@ -104,6 +104,10 @@ export function formatPitchName(doPitch: number, doLetter?: string): string {
   return letter;
 }
 
+export function keyLabel(key: Key): string {
+  return `${formatPitchName(key.doPitch, key.doLetter)} ${key.mode}`;
+}
+
 export type Spelling = {
   readonly letter: string;
   readonly accidental: Accidental;
@@ -116,11 +120,11 @@ export function keyLetters(key: Key): readonly string[] {
   return PITCH_LETTERS.map((_, index) => PITCH_LETTERS[(offset + index) % 7]!);
 }
 
-export function spellNote(key: Key, note: Note): Spelling {
+export function spellNote(key: Key, ref: DegreeRef): Spelling {
   const letters = keyLetters(key);
-  const index = ((note.degree % 7) + 7) % 7;
+  const index = ((ref.degree % 7) + 7) % 7;
   const letter = letters[index] ?? 'C';
-  const actual = absolutePitch(key, note);
+  const actual = absolutePitch(key, ref);
   const doOctave = Math.floor(key.doPitch / 12);
   const naturalBase = doOctave * 12 + (NATURAL_CLASS[letter] ?? 0);
   const nearestOctave = Math.round((actual - naturalBase) / 12);
@@ -139,18 +143,6 @@ export function spellToString(spelling: Spelling): string {
   return `${spelling.letter}${sign}${spelling.octave}`;
 }
 
-export function noteKey(note: Note): string {
-  return `${note.degree}/${note.accidental}/${note.pulses}`;
-}
-
-export type Note = {
-  readonly kind: 'note';
-  readonly id: string;
-  readonly degree: number;
-  readonly accidental: Accidental;
-  readonly pulses: number;
-};
-
 export function octaveOf(degree: number): number {
   return Math.floor(degree / 7);
 }
@@ -159,15 +151,20 @@ export function inRange(degree: number): boolean {
   return degree >= 0 && degree <= 6;
 }
 
-export function absolutePitch(key: Key, note: Note): number {
+export type DegreeRef = {
+  readonly degree: number;
+  readonly accidental: Accidental;
+};
+
+export function absolutePitch(key: Key, ref: DegreeRef): number {
   const steps = scaleSteps(key.mode);
-  const index = ((note.degree % 7) + 7) % 7;
+  const index = ((ref.degree % 7) + 7) % 7;
   const step = steps[index] ?? 0;
-  return key.doPitch + step + note.accidental + 12 * Math.floor(note.degree / 7);
+  return key.doPitch + step + ref.accidental + 12 * Math.floor(ref.degree / 7);
 }
 
 export function absPitchOfDegree(key: Key, degree: number, accidental: Accidental = 0): number {
-  return absolutePitch(key, { kind: 'note', id: '', degree, accidental, pulses: 2 });
+  return absolutePitch(key, { degree, accidental });
 }
 
 export const MIN_PULSES = 1;
@@ -177,9 +174,9 @@ export const MAX_PULSES = 16;
 export function pulseMarks(pulses: number): string[] {
   if (pulses <= 1) return [','];
   if (pulses === 2) return [];
-  const full = Math.floor(pulses / 2);
+  const extra = pulses - 2;
   const codes: string[] = ['!'];
-  for (let i = 1; i < full; i += 1) codes.push('-');
-  if (pulses % 2 === 1) codes.push('.');
+  for (let i = 0; i < Math.floor(extra / 2); i += 1) codes.push('-');
+  if (extra % 2 === 1) codes.push('.');
   return codes;
 }

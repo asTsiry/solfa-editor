@@ -24,7 +24,7 @@
 
 .solfa-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 380px);
   gap: 16px;
   height: 100%;
   min-height: 0;
@@ -114,4 +114,217 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(240px, 1fr) minmax(180px, 1fr);
   }
+}
+
+.solfa-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 16, 20, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.solfa-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(480px, 100%);
+  max-height: min(85vh, 720px);
+  background: var(--solfa-surface);
+  color: var(--solfa-note);
+  border: 1px solid var(--solfa-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.solfa-modal[data-wide="true"] {
+  width: min(760px, 100%);
+}
+
+.solfa-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--solfa-border);
+}
+
+.solfa-modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.solfa-modal-close {
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--solfa-muted);
+  cursor: pointer;
+}
+
+.solfa-modal-close:hover {
+  border-color: var(--solfa-border);
+  color: var(--solfa-note);
+}
+
+.solfa-modal-body {
+  padding: 16px;
+  overflow: auto;
+}
+
+.solfa-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--solfa-border);
+  background: color-mix(in srgb, var(--solfa-surface) 92%, transparent);
+}
+
+.solfa-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.solfa-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--solfa-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.solfa-field input[type="text"] {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--solfa-border);
+  background: var(--solfa-surface);
+  color: inherit;
+}
+
+.solfa-field input[type="text"]:focus {
+  outline: 2px solid var(--solfa-key);
+  outline-offset: -1px;
+}
+
+.solfa-field-hint {
+  font-size: 12px;
+  color: var(--solfa-muted);
+}
+
+.solfa-format {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.solfa-format-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--solfa-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.solfa-format-option:has(input:checked) {
+  border-color: var(--solfa-key);
+  box-shadow: inset 0 0 0 1px var(--solfa-key);
+}
+
+.solfa-format-option input {
+  margin: 2px 0 0;
+  accent-color: var(--solfa-key);
+}
+
+.solfa-format-option-text {
+  display: grid;
+  gap: 2px;
+}
+
+.solfa-format-option-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.solfa-format-option-note {
+  font-size: 12px;
+  color: var(--solfa-muted);
+}
+
+.solfa-help {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.solfa-help h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--solfa-key);
+  margin: 20px 0 8px;
+}
+
+.solfa-help h3:first-child {
+  margin-top: 0;
+}
+
+.solfa-help p {
+  margin: 0 0 8px;
+}
+
+.solfa-help ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.solfa-help li {
+  margin-bottom: 4px;
+}
+
+.solfa-help code,
+.solfa-help kbd {
+  font-family: var(--solfa-mono);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--solfa-muted) 18%, transparent);
+}
+
+.solfa-help table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.solfa-help th,
+.solfa-help td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--solfa-border);
+  vertical-align: top;
+}
+
+.solfa-help th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--solfa-muted);
 }

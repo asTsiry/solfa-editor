@@ -5,25 +5,33 @@ import {
   layout,
   nearestNote,
   type DisplayGlyph,
+  type LaidOutScore,
 } from '../src/layout.js';
 import { parse } from '../src/parse.js';
 import { sequentialIdFactory } from '../src/ids.js';
-import { notesOf } from '../src/score.js';
+import { DEFAULT_PARTS, voiceNotesOf } from '../src/score.js';
 
 function build(text: string, options = {}) {
   const result = parse(text, { idFactory: sequentialIdFactory('n') });
   expect(result.errors).toHaveLength(0);
   const laid = layout(result.score, result.spans, { ...DEFAULT_LAYOUT, ...options });
-  return { result, laid, notes: notesOf(result.score) };
+  return { result, laid, notes: voiceNotesOf(result.score) };
 }
 
-function glyphs(laid: { items: readonly unknown[] }, role: DisplayGlyph['role']): DisplayGlyph[] {
+function glyphs(laid: LaidOutScore, role: DisplayGlyph['role']): DisplayGlyph[] {
   return (laid.items as readonly DisplayGlyph[]).filter(
     (item) => item.kind === 'glyph' && item.role === role,
   );
 }
 
-describe('layout', () => {
+function lines(laid: LaidOutScore, role: string) {
+  return (laid.items as readonly { kind: string; role: string; y1: number; x1: number; x2: number }[])
+    .filter((item) => item.kind === 'line' && item.role === role);
+}
+
+const CHOIR = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t'].join('\n');
+
+describe('layout: single voice', () => {
   it('emits one letter glyph per note', () => {
     const { laid, notes } = build('|d r');
     expect(glyphs(laid, 'solfa-letter')).toHaveLength(notes.length);
@@ -31,10 +39,7 @@ describe('layout', () => {
 
   it('emits a bar line on both sides of a measure', () => {
     const { laid } = build('|d r m');
-    const bars = (laid.items as readonly { kind: string; role: string }[]).filter(
-      (item) => item.kind === 'line' && item.role === 'barline',
-    );
-    expect(bars).toHaveLength(2);
+    expect(lines(laid, 'barline')).toHaveLength(2);
   });
 
   it('renders pulse marks for durations', () => {
@@ -80,14 +85,11 @@ describe('layout', () => {
 
   it('wraps onto a new system when a measure will not fit', () => {
     const { laid } = build('|d r m f s l t |d r m f s l t', { systemWidth: 300 });
-    const systems = new Set(laid.notes.map((note) => note.systemIndex));
-    expect(systems.size).toBe(2);
+    expect(new Set(laid.notes.map((note) => note.systemIndex)).size).toBe(2);
   });
 
   it('keeps every note inside the system width', () => {
-    const { laid } = build('|d ! - r ! - m ! - f s l t |d r m f s l t', {
-      systemWidth: 300,
-    });
+    const { laid } = build('|d ! - r ! - m ! - f s l t |d r m f s l t', { systemWidth: 300 });
     for (const note of laid.notes) {
       expect(note.x).toBeGreaterThanOrEqual(0);
       expect(note.x + note.width).toBeLessThanOrEqual(laid.width);
@@ -118,8 +120,229 @@ describe('layout', () => {
   });
 
   it('handles an empty score', () => {
-    const laid = layout({ kind: 'score', sections: [] }, [], DEFAULT_LAYOUT);
+    const laid = layout({ kind: 'score', parts: [], sections: [] }, [], DEFAULT_LAYOUT);
     expect(laid.notes).toHaveLength(0);
     expect(laid.hitRegions).toHaveLength(0);
+  });
+
+  it('handles a score with parts but no music', () => {
+    const laid = layout({ kind: 'score', parts: DEFAULT_PARTS, sections: [] }, [], DEFAULT_LAYOUT);
+    expect(laid.notes).toHaveLength(0);
+  });
+});
+
+describe('layout: choir', () => {
+  it('gives every part its own row', () => {
+    const { laid, notes } = build(CHOIR);
+    expect(laid.notes).toHaveLength(notes.length);
+    const rows = [...new Set(laid.notes.map((note) => note.y))].sort((a, b) => a - b);
+    expect(rows).toHaveLength(4);
+  });
+
+  it('puts the parts in score order from top to bottom', () => {
+    const { laid } = build(CHOIR);
+    const byRow = new Map<number, string>();
+    for (const note of laid.notes) byRow.set(note.y, note.partId);
+    expect([...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, id]) => id)).toEqual([
+      'soprano',
+      'alto',
+      'tenor',
+      'bass',
+    ]);
+  });
+
+  it('shares one column across the voices of a beat', () => {
+    const { laid } = build(CHOIR);
+    const first = laid.notes.filter((note) => note.beatIndex === 0);
+    expect(new Set(first.map((note) => note.x)).size).toBe(1);
+  });
+
+  it('advances every voice to the next column together', () => {
+    const { laid } = build(CHOIR);
+    const beats = new Map<number, Set<number>>();
+    for (const note of laid.notes) {
+      const set = beats.get(note.beatIndex) ?? new Set<number>();
+      set.add(note.x);
+      beats.set(note.beatIndex, set);
+    }
+    const columns = [...beats.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, xs]) => [...xs][0]);
+    expect(new Set(columns).size).toBe(columns.length);
+    for (let i = 1; i < columns.length; i += 1) {
+      expect(columns[i]!).toBeGreaterThan(columns[i - 1]!);
+    }
+  });
+
+  it('draws one staff line per voice per system', () => {
+    const { laid } = build(CHOIR, { systemWidth: 300 });
+    const systems = new Set(laid.notes.map((note) => note.systemIndex));
+    expect(lines(laid, 'system-line')).toHaveLength(systems.size * 4);
+  });
+
+  it('draws a light tick at the start of every beat but the first', () => {
+    const { laid } = build(CHOIR);
+    expect(lines(laid, 'pulse-tick')).toHaveLength(3);
+  });
+
+  it('writes the rhythm once, on the first voice only', () => {
+    const { laid } = build(['|', 'S: d! - r, m', 'A: r m f', 'T: m f s', 'B: f s l'].join('\n'));
+    const marks = glyphs(laid, 'pulse-mark');
+    expect(marks.map((item) => item.code)).toEqual(['!', '-', ',']);
+    expect(new Set(marks.map((item) => item.y)).size).toBe(1);
+  });
+
+  it('leaves a gap where a voice rests', () => {
+    const { laid } = build(['|', 'S: d r m f', 'A: r m 0 f', 'T: m f s l', 'B: f s l t'].join('\n'));
+    const alto = laid.notes.filter((note) => note.partId === 'alto');
+    expect(alto).toHaveLength(3);
+  });
+
+  it('reserves the same column width whether or not a voice is altered', () => {
+    const { laid } = build(['|', 'S: d r', 'A: r r#'].join('\n'));
+    const soprano = laid.notes.filter((note) => note.partId === 'soprano');
+    const alto = laid.notes.filter((note) => note.partId === 'alto');
+    for (let i = 0; i < soprano.length; i += 1) {
+      expect(alto[i]!.x).toBe(soprano[i]!.x);
+    }
+  });
+
+  it('hit tests each voice in its own row', () => {
+    const { laid, notes } = build(CHOIR);
+    const bass = laid.notes.find((note) => note.partId === 'bass')!;
+    expect(hitTest(laid, bass.x + 2, bass.y + 4)).toBe(bass.noteId);
+    const sopranoNote = notes.find((note) => note.partId === 'soprano')!;
+    expect(hitTest(laid, bass.x + 2, bass.y + 4)).not.toBe(sopranoNote.id);
+  });
+
+  it('labels every row with its voice name when there is more than one part', () => {
+    const { laid } = build(CHOIR);
+    expect(glyphs(laid, 'part-name').map((item) => item.code)).toEqual(['S', 'A', 'T', 'B']);
+  });
+
+  it('leaves out the voice gutter for a single part', () => {
+    const { laid } = build([':parts=Soprano:S:treble', '|', 'S: d r'].join('\n'));
+    expect(glyphs(laid, 'part-name')).toHaveLength(0);
+  });
+
+  it('stacks the rows of a system without overlapping them', () => {
+    const { laid } = build(CHOIR);
+    const rows = [...new Set(laid.notes.map((note) => note.y))].sort((a, b) => a - b);
+    for (let i = 1; i < rows.length; i += 1) {
+      expect(rows[i]! - rows[i - 1]!).toBe(laid.voiceRowHeight);
+    }
+  });
+
+  it('keeps every voice inside the system height', () => {
+    const { laid } = build(CHOIR, { systemWidth: 300 });
+    const lowest = Math.max(...laid.notes.map((note) => note.y + note.height));
+    expect(lowest).toBeLessThanOrEqual(laid.height);
+  });
+
+  it('grows the page with the number of voices', () => {
+    const one = build([':parts=Soprano:S:treble', '|', 'S: d r'].join('\n')).laid;
+    const four = build(CHOIR).laid;
+    expect(four.height).toBeGreaterThan(one.height);
+  });
+});
+
+describe('layout: lyrics', () => {
+  const SUNG = ['|', 'S: d r m f', 'A: r m f s', 'T: m f s l', 'B: f s l t', 'P: Ave Ma ri a'].join('\n');
+
+  it('draws one glyph per syllable', () => {
+    const { laid } = build(SUNG);
+    expect(glyphs(laid, 'lyric').map((item) => item.code)).toEqual(['Ave', 'Ma', 'ri', 'a']);
+  });
+
+  it('puts the lyrics under the lowest voice', () => {
+    const { laid } = build(SUNG);
+    const lyric = glyphs(laid, 'lyric')[0]!;
+    const lowestStaff = Math.max(...lines(laid, 'system-line').map((line) => line.y1));
+    expect(lyric.y).toBeGreaterThan(lowestStaff);
+  });
+
+  it('centres each syllable inside the column of its beat', () => {
+    const { laid } = build(SUNG);
+    const byBeat = new Map<number, { x: number; width: number }>();
+    for (const note of laid.notes) {
+      byBeat.set(note.beatIndex, { x: note.x, width: note.width });
+    }
+    const lyrics = glyphs(laid, 'lyric');
+    lyrics.forEach((lyric, beatIndex) => {
+      const column = byBeat.get(beatIndex)!;
+      expect(lyric.x).toBeGreaterThan(column.x);
+      expect(lyric.x).toBeLessThan(column.x + column.width);
+    });
+  });
+
+  it('puts the first syllable under the first beat', () => {
+    const { laid } = build(SUNG);
+    const first = laid.notes.find((note) => note.beatIndex === 0)!;
+    expect(glyphs(laid, 'lyric')[0]!.x).toBe(first.x + DEFAULT_LAYOUT.cellWidth / 2);
+  });
+
+  it('leaves out the lyric row when there are no lyrics', () => {
+    const { laid } = build(CHOIR);
+    expect(glyphs(laid, 'lyric')).toHaveLength(0);
+  });
+
+  it('reserves a lyric row only for the systems that need one', () => {
+    const mixed = build(['|1:', 'S: d r', 'A: r m', 'T: m f', 'B: f s', '|2:', 'S: m f', 'A: m f', 'T: f s', 'B: s l'].join('\n'));
+    expect(glyphs(mixed.laid, 'lyric')).toHaveLength(0);
+  });
+
+  it('draws a staff line per voice even on a system with lyrics', () => {
+    const { laid } = build(SUNG);
+    expect(lines(laid, 'system-line')).toHaveLength(4);
+  });
+});
+
+describe('systems and section labels', () => {
+  it('draws a staff line for every system, including the first and last', () => {
+    const text = '|d r m f s l t |d r m f s l t |d r m f s l t |d r m f s l t |d r m f s l t';
+    const { laid } = build(text, { systemWidth: 300 });
+    const systems = new Set(laid.notes.map((note) => note.systemIndex));
+    expect(lines(laid, 'system-line')).toHaveLength(systems.size);
+    expect(systems.size).toBeGreaterThan(1);
+  });
+
+  it('stacks systems down the page rather than on one line', () => {
+    const text = '|d r m f s l t |d r m f s l t |d r m f s l t';
+    const { laid } = build(text, { systemWidth: 300 });
+    const tops = [...new Set(laid.notes.map((note) => note.y))].sort((a, b) => a - b);
+    expect(tops.length).toBeGreaterThan(1);
+    expect(tops[1]! - tops[0]!).toBe(laid.systemHeight);
+  });
+
+  it('gives every note a distinct horizontal position on one system', () => {
+    const { laid } = build('|d r m f s l t', { systemWidth: 960 });
+    const xs = laid.notes.map((note) => note.x);
+    expect(new Set(xs).size).toBe(xs.length);
+  });
+
+  it('starts a new system for each new section and labels it with the key', () => {
+    const { laid } = build('|d r |f: f s l', { systemWidth: 960 });
+    expect(glyphs(laid, 'section-label').map((item) => item.code)).toEqual(['C major', 'F major']);
+  });
+
+  it('never overlaps a section label with the notes of its system', () => {
+    const { laid } = build('|d r |f: f s l', { systemWidth: 960 });
+    const label = glyphs(laid, 'section-label')[0]!;
+    expect(label.y).toBeLessThan(Math.min(...laid.notes.map((note) => note.y)));
+  });
+
+  it('labels a numbered section with the key it kept', () => {
+    const { laid } = build([':do=F', '|1:', 'S: d r', '|2:', 'S: m f'].join('\n'));
+    expect(glyphs(laid, 'section-label').map((item) => item.code)).toEqual(['F major', 'F major']);
+  });
+
+  it('grows the page height to fit every system', () => {
+    const single = build('|d r m f s l t', { systemWidth: 960 }).laid;
+    const many = build('|d r m f s l t |d r m f s l t |d r m f s l t |d r m f s l t', {
+      systemWidth: 300,
+    }).laid;
+    expect(many.height).toBeGreaterThan(single.height);
+    const lowestNote = Math.max(...many.notes.map((note) => note.y + note.height));
+    expect(many.height).toBeGreaterThan(lowestNote);
   });
 });

@@ -1,4 +1,5 @@
-import type { DisplayItem, LaidOutScore } from '@solfa/core';
+import { DEFAULT_LAYOUT, layout, type LayoutOptions, type Score, type Span } from '@solfa/core';
+import type { DisplayItem, GlyphRole, LaidOutScore } from '@solfa/core';
 
 export type CanvasTheme = {
   readonly background: string;
@@ -38,9 +39,17 @@ export const DARK_THEME: CanvasTheme = {
 
 const NOTE_FONT_FAMILY = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
 const LABEL_FONT = '500 12px ui-sans-serif, system-ui, sans-serif';
+const LYRIC_FONT = 'italic 13px ui-sans-serif, system-ui, sans-serif';
+
+function isLabelRole(role: GlyphRole): boolean {
+  return (
+    role === 'section-label' || role === 'measure-number' || role === 'part-name'
+  );
+}
 
 function glyphFont(item: Extract<DisplayItem, { kind: 'glyph' }>): string {
-  if (item.role === 'section-label' || item.role === 'measure-number') return LABEL_FONT;
+  if (item.role === 'lyric') return LYRIC_FONT;
+  if (isLabelRole(item.role)) return LABEL_FONT;
   return `600 ${item.fontSize}px ${NOTE_FONT_FAMILY}`;
 }
 
@@ -68,10 +77,10 @@ function paintItem(
   }
 
   context.font = glyphFont(item);
-  context.textAlign = 'left';
+  context.textAlign = item.role === 'lyric' ? 'center' : 'left';
   context.textBaseline = 'alphabetic';
   context.fillStyle =
-    item.role === 'section-label' || item.role === 'measure-number'
+    isLabelRole(item.role)
       ? theme.muted
       : item.role === 'accidental' || item.role === 'pulse-mark' || item.role === 'octave-dot'
         ? theme.muted
@@ -93,8 +102,6 @@ export function drawScore(
   const selected = options.selectedNoteIds ?? new Set<string>();
 
   context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, laid.width, laid.height);
   context.fillStyle = theme.background;
   context.fillRect(0, 0, laid.width, laid.height);
   context.restore();
@@ -138,4 +145,28 @@ export function sizeCanvas(
   canvas.style.height = `${height}px`;
   const context = canvas.getContext('2d');
   if (context) context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+}
+
+export type RenderScoreOptions = {
+  readonly score: Score;
+  readonly spans: readonly Span[];
+  readonly layoutOptions?: Partial<LayoutOptions> | undefined;
+  readonly theme?: CanvasTheme | undefined;
+  readonly scale?: number | undefined;
+};
+
+/**
+ * Renders a score to a detached canvas at an arbitrary scale, with no selection
+ * or hover state, for exporting to an image or a document.
+ */
+export function renderScoreCanvas(options: RenderScoreOptions): HTMLCanvasElement {
+  const layoutOptions: LayoutOptions = { ...DEFAULT_LAYOUT, ...options.layoutOptions };
+  const scale = options.scale && options.scale > 0 ? options.scale : 2;
+  const laid = layout(options.score, options.spans, layoutOptions);
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('2D canvas context is unavailable');
+  sizeCanvas(canvas, laid, scale);
+  drawScore(context, laid, { theme: options.theme });
+  return canvas;
 }

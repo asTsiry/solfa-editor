@@ -1,5 +1,5 @@
-import { LETTERS, octaveOf, pulseMarks, type Note } from './pitch.js';
-import type { Score, Section, Span } from './score.js';
+import { LETTERS, keyLabel, octaveOf, pulseMarks } from './pitch.js';
+import type { Beat, Measure, Part, Score, Section, Span, VoiceNote } from './score.js';
 
 export type GlyphRole =
   | 'solfa-letter'
@@ -7,6 +7,8 @@ export type GlyphRole =
   | 'octave-dot'
   | 'pulse-mark'
   | 'section-label'
+  | 'part-name'
+  | 'lyric'
   | 'measure-number';
 
 export type DisplayGlyph = {
@@ -43,10 +45,13 @@ export type HitRegion = {
 
 export type PositionedNote = {
   readonly noteId: string;
+  readonly partId: string;
+  readonly partIndex: number;
+  readonly rowIndex: number;
   readonly sectionIndex: number;
   readonly measureIndex: number;
-  readonly noteIndex: number;
-  readonly note: Note;
+  readonly beatIndex: number;
+  readonly note: VoiceNote;
   readonly span: Span | undefined;
   readonly x: number;
   readonly y: number;
@@ -62,6 +67,8 @@ export type LaidOutScore = {
   readonly notes: readonly PositionedNote[];
   readonly hitRegions: readonly HitRegion[];
   readonly systemHeight: number;
+  readonly voiceRowHeight: number;
+  readonly rowCount: number;
 };
 
 export type LayoutOptions = {
@@ -71,47 +78,84 @@ export type LayoutOptions = {
   readonly cellWidth: number;
   readonly fontSize: number;
   readonly noteHeight: number;
+  readonly partGap: number;
   readonly systemGap: number;
   readonly measureGap: number;
   readonly pulseMarkWidth: number;
+  readonly partNameWidth: number;
+  readonly lyricHeight: number;
+  readonly lyricFontSize: number;
 };
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
   systemWidth: 960,
   leftMargin: 24,
-  topMargin: 24,
+  topMargin: 36,
   cellWidth: 26,
   fontSize: 20,
   noteHeight: 34,
-  systemGap: 28,
+  partGap: 12,
+  systemGap: 52,
   measureGap: 18,
   pulseMarkWidth: 9,
+  partNameWidth: 58,
+  lyricHeight: 24,
+  lyricFontSize: 13,
 };
+
+const BAR_PADDING = 14;
 
 function pulseMarkCount(pulses: number): number {
   return pulseMarks(pulses).length;
 }
 
-function noteWidth(note: Note, options: LayoutOptions): number {
-  const marks = pulseMarkCount(note.pulses);
-  const accidentalWidth = note.accidental === 0 ? 0 : options.pulseMarkWidth;
-  return accidentalWidth + options.cellWidth + marks * options.pulseMarkWidth;
+function beatAccidentalWidth(beat: Beat, rows: readonly number[], options: LayoutOptions): number {
+  for (const partIndex of rows) {
+    const note = beat.notes[partIndex];
+    if (note && note.accidental !== 0) return options.pulseMarkWidth;
+  }
+  return 0;
 }
 
-function measureWidth(
-  notes: readonly Note[],
-  options: LayoutOptions,
-): number {
+function beatWidth(beat: Beat, rows: readonly number[], options: LayoutOptions): number {
+  const accidentalWidth = beatAccidentalWidth(beat, rows, options);
+  return accidentalWidth + options.cellWidth + pulseMarkCount(beat.pulses) * options.pulseMarkWidth;
+}
+
+function measureWidth(measure: Measure, rows: readonly number[], options: LayoutOptions): number {
   let total = 0;
-  for (const note of notes) total += noteWidth(note, options);
+  for (const beat of measure.beats) total += beatWidth(beat, rows, options);
   return total;
 }
+
+function sectionHasLyrics(section: Section): boolean {
+  return section.measures.some((measure) => measure.beats.some((beat) => beat.lyric !== null));
+}
+
+function singingRows(section: Section, partCount: number): number[] {
+  const rows: number[] = [];
+  for (let index = 0; index < partCount; index += 1) {
+    const sings = section.measures.some((measure) =>
+      measure.beats.some((beat) => beat.notes[index] != null),
+    );
+    if (sings) rows.push(index);
+  }
+  return rows;
+}
+
+type SystemRecord = {
+  top: number;
+  rows: number[];
+  lyrics: boolean;
+  gutter: number;
+};
 
 type PendingMeasure = {
   sectionIndex: number;
   section: Section;
   measureIndex: number;
-  notes: readonly Note[];
+  measure: Measure;
+  rows: number[];
   width: number;
 };
 
@@ -124,129 +168,196 @@ export function layout(
   const spanByNote = new Map<string, Span>();
   for (const span of spans) spanByNote.set(span.noteId, span);
 
+  const parts: readonly Part[] = score.parts;
+  const partCount = parts.length;
+
   const items: DisplayItem[] = [];
   const notes: PositionedNote[] = [];
   const hitRegions: HitRegion[] = [];
 
-  const systemHeight = options.noteHeight + options.systemGap;
+  const voiceRowHeight = options.noteHeight + options.partGap;
+  const systems = new Map<number, SystemRecord>();
+
+  const rowsHeight = (record: SystemRecord): number =>
+    record.rows.length * voiceRowHeight + (record.lyrics ? options.lyricHeight : 0);
+
+  let systemHeight = voiceRowHeight + options.systemGap;
   let y = options.topMargin;
   let x = options.leftMargin;
-
   let currentSystem = 0;
   let isFirstMeasureOnSystem = true;
+  let currentRows: number[] = [];
+  let currentLyrics = false;
+  let currentGutter = 0;
+
+  const openSystem = (): void => {
+    systems.set(currentSystem, {
+      top: y,
+      rows: currentRows,
+      lyrics: currentLyrics,
+      gutter: currentGutter,
+    });
+    x = options.leftMargin + currentGutter;
+  };
 
   const newSystem = (): void => {
-    items.push({
-      kind: 'line',
-      role: 'system-line',
-      x1: options.leftMargin,
-      y1: y + options.noteHeight + 6,
-      x2: options.systemWidth,
-      y2: y + options.noteHeight + 6,
-      width: 1,
-    });
-    x = options.leftMargin;
     y += systemHeight;
     currentSystem += 1;
+    isFirstMeasureOnSystem = true;
+    openSystem();
   };
 
   const placeMeasure = (pending: PendingMeasure): void => {
+    const record = systems.get(currentSystem) ?? {
+      top: y,
+      rows: pending.rows,
+      lyrics: currentLyrics,
+      gutter: currentGutter,
+    };
+    const top = record.top;
+    const stackHeight = rowsHeight(record);
+
+    const rowOf = (partIndex: number): number => pending.rows.indexOf(partIndex);
+    const rowY = (rowIndex: number): number => top + rowIndex * voiceRowHeight + options.noteHeight;
+
     if (!isFirstMeasureOnSystem) x += options.measureGap;
 
     items.push({
       kind: 'line',
       role: 'barline',
       x1: x,
-      y1: y - 2,
+      y1: top - 4,
       x2: x,
-      y2: y + options.noteHeight,
+      y2: top + stackHeight,
       width: 1.5,
     });
     x += 6;
 
-    pending.notes.forEach((note, noteIndex) => {
-      const width = noteWidth(note, options);
-      const height = options.noteHeight;
+    pending.measure.beats.forEach((beat, beatIndex) => {
+      const beatLeft = x;
+      const accidentalWidth = beatAccidentalWidth(beat, pending.rows, options);
+      const letterX = beatLeft + accidentalWidth;
+      const marksWidth = pulseMarkCount(beat.pulses) * options.pulseMarkWidth;
+      const width = accidentalWidth + options.cellWidth + marksWidth;
 
-      if (note.accidental !== 0) {
+      if (beatIndex > 0) {
+        items.push({
+          kind: 'line',
+          role: 'pulse-tick',
+          x1: beatLeft,
+          y1: top - 4,
+          x2: beatLeft,
+          y2: top + stackHeight,
+          width: 0.5,
+        });
+      }
+
+      for (const partIndex of pending.rows) {
+        const note = beat.notes[partIndex] ?? null;
+        if (!note) continue;
+        const rowIndex = rowOf(partIndex);
+        const baseline = rowY(rowIndex);
+
+        if (note.accidental !== 0) {
+          items.push({
+            kind: 'glyph',
+            role: 'accidental',
+            code: note.accidental > 0 ? '#' : 'b',
+            x: beatLeft,
+            y: baseline,
+            width: options.pulseMarkWidth,
+            height: options.noteHeight,
+            fontSize: options.fontSize,
+            noteId: note.id,
+          });
+        }
+
         items.push({
           kind: 'glyph',
-          role: 'accidental',
-          code: note.accidental > 0 ? '#' : 'b',
-          x,
-          y,
-          width: options.pulseMarkWidth,
-          height,
+          role: 'solfa-letter',
+          code: LETTERS[((note.degree % 7) + 7) % 7] ?? 'd',
+          x: letterX,
+          y: baseline,
+          width: options.cellWidth,
+          height: options.noteHeight,
           fontSize: options.fontSize,
           noteId: note.id,
         });
-        x += options.pulseMarkWidth;
+
+        if (rowIndex === 0) {
+          let cursor = letterX + options.cellWidth;
+          for (const mark of pulseMarks(beat.pulses)) {
+            items.push({
+              kind: 'glyph',
+              role: 'pulse-mark',
+              code: mark,
+              x: cursor,
+              y: baseline + options.noteHeight - 14,
+              width: options.pulseMarkWidth,
+              height: 14,
+              fontSize: Math.round(options.fontSize * 0.7),
+              noteId: note.id,
+            });
+            cursor += options.pulseMarkWidth;
+          }
+        }
+
+        const up = octaveOf(note.degree);
+        for (let dot = 0; dot < Math.abs(up); dot += 1) {
+          items.push({
+            kind: 'glyph',
+            role: 'octave-dot',
+            code: '',
+            x: letterX - 7,
+            y: up > 0 ? baseline - 11 + dot * 5 : baseline + options.noteHeight - 6 + dot * 5,
+            width: 4,
+            height: 4,
+            fontSize: 4,
+            noteId: note.id,
+          });
+        }
+
+        const positioned: PositionedNote = {
+          noteId: note.id,
+          partId: note.partId,
+          partIndex,
+          rowIndex,
+          sectionIndex: pending.sectionIndex,
+          measureIndex: pending.measureIndex,
+          beatIndex,
+          note,
+          span: spanByNote.get(note.id),
+          x: beatLeft,
+          y: baseline,
+          width,
+          height: options.noteHeight,
+          systemIndex: currentSystem,
+        };
+        notes.push(positioned);
+        hitRegions.push({
+          noteId: note.id,
+          x: beatLeft,
+          y: baseline,
+          width,
+          height: options.noteHeight,
+        });
       }
 
-      items.push({
-        kind: 'glyph',
-        role: 'solfa-letter',
-        code: LETTERS[((note.degree % 7) + 7) % 7] ?? 'd',
-        x,
-        y,
-        width: options.cellWidth,
-        height,
-        fontSize: options.fontSize,
-        noteId: note.id,
-      });
-      x += options.cellWidth;
-
-      for (const mark of pulseMarks(note.pulses)) {
+      if (beat.lyric !== null) {
         items.push({
           kind: 'glyph',
-          role: 'pulse-mark',
-          code: mark,
-          x,
-          y: y + height - 14,
-          width: options.pulseMarkWidth,
-          height: 14,
-          fontSize: Math.round(options.fontSize * 0.7),
-          noteId: note.id,
-        });
-        x += options.pulseMarkWidth;
-      }
-
-      const up = octaveOf(note.degree);
-      for (let dot = 0; dot < Math.abs(up); dot += 1) {
-        items.push({
-          kind: 'glyph',
-          role: 'octave-dot',
-          code: '',
-          x: x - options.cellWidth + 2,
-          y: up > 0 ? y - 9 + dot * 5 : y + height - 4 + dot * 5,
-          width: 4,
-          height: 4,
-          fontSize: 4,
-          noteId: note.id,
+          role: 'lyric',
+          code: beat.lyric,
+          x: letterX + options.cellWidth / 2,
+          y: top + pending.rows.length * voiceRowHeight + options.lyricFontSize + 6,
+          width: beat.lyric.length * options.lyricFontSize * 0.55,
+          height: options.lyricFontSize,
+          fontSize: options.lyricFontSize,
+          noteId: null,
         });
       }
 
-      const positioned: PositionedNote = {
-        noteId: note.id,
-        sectionIndex: pending.sectionIndex,
-        measureIndex: pending.measureIndex,
-        noteIndex,
-        note,
-        span: spanByNote.get(note.id),
-        x: x - width,
-        y,
-        width,
-        height,
-        systemIndex: currentSystem,
-      };
-      notes.push(positioned);
-      hitRegions.push({
-        noteId: note.id,
-        x: positioned.x,
-        y,
-        width,
-        height,
-      });
+      x = beatLeft + width;
     });
 
     const barX = x + 2;
@@ -254,48 +365,105 @@ export function layout(
       kind: 'line',
       role: 'barline',
       x1: barX,
-      y1: y - 2,
+      y1: top - 4,
       x2: barX,
-      y2: y + options.noteHeight,
+      y2: top + stackHeight,
       width: 1.5,
     });
     x = barX + 6;
     isFirstMeasureOnSystem = false;
   };
 
-  score.sections.forEach((section, sectionIndex) => {
-    if (sectionIndex > 0) {
+  const sections = score.sections
+    .map((section) => ({ section, rows: singingRows(section, partCount) }))
+    .filter((entry) => entry.rows.length > 0 && entry.section.measures.some((m) => m.beats.length > 0));
+
+  sections.forEach((entry, sectionIndex) => {
+    const { section, rows } = entry;
+    const lyrics = sectionHasLyrics(section);
+    const gutter = rows.length > 1 ? options.partNameWidth : 0;
+    const needed = rows.length * voiceRowHeight + (lyrics ? options.lyricHeight : 0) + options.systemGap;
+
+    currentRows = rows;
+    currentLyrics = lyrics;
+    currentGutter = gutter;
+
+    if (sectionIndex > 0) newSystem();
+    if (sectionIndex > 0 || systemHeight !== needed) systemHeight = needed;
+    openSystem();
+
+    items.push({
+      kind: 'glyph',
+      role: 'section-label',
+      code: keyLabel(section.key),
+      x: options.leftMargin,
+      y: y - 18,
+      width: 0,
+      height: 0,
+      fontSize: 12,
+      noteId: null,
+    });
+
+    for (let rowIndex = 0; gutter > 0 && rowIndex < rows.length; rowIndex += 1) {
+      const part = parts[rows[rowIndex] ?? -1];
+      if (!part) continue;
       items.push({
         kind: 'glyph',
-        role: 'section-label',
-        code: '',
+        role: 'part-name',
+        code: part.shortName,
         x: options.leftMargin,
-        y: y - 16,
-        width: 0,
-        height: 0,
-        fontSize: 12,
+        y: y + rowIndex * voiceRowHeight + options.noteHeight,
+        width: gutter - 6,
+        height: options.noteHeight,
+        fontSize: 13,
         noteId: null,
       });
-      x = options.leftMargin;
     }
 
-    section.measures.forEach((measure, measureIndex) => {
-      if (measure.notes.length === 0) return;
-      const width = measureWidth(measure.notes, options);
-
-      if (x !== options.leftMargin && x + width > options.systemWidth) newSystem();
-
-      placeMeasure({ sectionIndex, section, measureIndex, notes: measure.notes, width });
-    });
+    for (const measure of section.measures) {
+      if (measure.beats.length === 0) continue;
+      const width = measureWidth(measure, rows, options);
+      const lead = isFirstMeasureOnSystem ? 0 : options.measureGap;
+      if (x + lead + width + BAR_PADDING > options.systemWidth) newSystem();
+      placeMeasure({
+        sectionIndex,
+        section,
+        measureIndex: section.measures.indexOf(measure),
+        measure,
+        rows,
+        width,
+      });
+    }
   });
+
+  for (const [, record] of [...systems].sort((a, b) => a[0] - b[0])) {
+    for (let rowIndex = 0; rowIndex < record.rows.length; rowIndex += 1) {
+      const baseline = record.top + rowIndex * voiceRowHeight + options.noteHeight + 6;
+      items.push({
+        kind: 'line',
+        role: 'system-line',
+        x1: options.leftMargin + record.gutter,
+        y1: baseline,
+        x2: options.systemWidth,
+        y2: baseline,
+        width: 1,
+      });
+    }
+  }
+
+  const last = [...systems.values()].pop();
+  const height = last ? last.top + rowsHeight(last) + options.topMargin : options.topMargin;
+  const rowCount = last ? last.rows.length : 0;
 
   return {
     width: options.systemWidth,
-    height: y + options.noteHeight + options.topMargin,
+    height,
     items,
     notes,
     hitRegions,
     systemHeight,
+    voiceRowHeight,
+    rowCount,
   };
 }
 

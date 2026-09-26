@@ -1,4 +1,5 @@
-import { noteKey, type Note } from './pitch.js';
+import type { Score, VoiceNote } from './score.js';
+import { voiceNotesOf } from './score.js';
 
 const MAX_CELLS = 400_000;
 
@@ -54,15 +55,17 @@ function lcsPairs(a: readonly string[], b: readonly string[]): [number, number][
   return pairs;
 }
 
-export function reconcileIds(previous: readonly Note[], next: readonly Note[]): IdMapping {
+export function noteKey(note: VoiceNote): string {
+  return `${note.partId}:${note.degree}/${note.accidental}`;
+}
+
+export function reconcileIds(previous: readonly VoiceNote[], next: readonly VoiceNote[]): IdMapping {
   const oldToNew = new Map<string, string>();
   if (previous.length === 0 || next.length === 0) {
     return { oldToNew, carriedOver: 0 };
   }
 
-  const oldKeys = previous.map(noteKey);
-  const newKeys = next.map(noteKey);
-  const pairs = lcsPairs(oldKeys, newKeys);
+  const pairs = lcsPairs(previous.map(noteKey), next.map(noteKey));
 
   for (const [oldIndex, newIndex] of pairs) {
     const oldNote = previous[oldIndex];
@@ -73,7 +76,7 @@ export function reconcileIds(previous: readonly Note[], next: readonly Note[]): 
   return { oldToNew, carriedOver: pairs.length };
 }
 
-export function carryOverIds(notes: readonly Note[], mapping: IdMapping): Note[] {
+export function carryOverIds(notes: readonly VoiceNote[], mapping: IdMapping): VoiceNote[] {
   const newToOld = new Map<string, string>();
   for (const [oldId, newId] of mapping.oldToNew) {
     newToOld.set(newId, oldId);
@@ -82,4 +85,23 @@ export function carryOverIds(notes: readonly Note[], mapping: IdMapping): Note[]
     const stableId = newToOld.get(note.id);
     return stableId ? { ...note, id: stableId } : note;
   });
+}
+
+export function reconcileScore(previous: Score, next: Score): Score {
+  const mapping = reconcileIds(voiceNotesOf(previous), voiceNotesOf(next));
+  const carried = carryOverIds(voiceNotesOf(next), mapping);
+  let index = 0;
+  return {
+    ...next,
+    sections: next.sections.map((section) => ({
+      ...section,
+      measures: section.measures.map((measure) => ({
+        ...measure,
+        beats: measure.beats.map((beat) => ({
+          ...beat,
+          notes: beat.notes.map((note) => (note ? (carried[index++] as VoiceNote) : null)),
+        })),
+      })),
+    })),
+  };
 }

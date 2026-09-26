@@ -1,11 +1,45 @@
-import type { Accidental, Key, Note } from './pitch.js';
+import type { Accidental, Key } from './pitch.js';
 
-export type { Accidental, Key, Note };
+export type { Accidental, Key };
+
+export type PartId = string;
+
+export type Clef = 'treble' | 'alto' | 'tenor' | 'treble8vb' | 'bass';
+
+export const CLEFS: readonly Clef[] = ['treble', 'alto', 'tenor', 'treble8vb', 'bass'];
+
+export function isClef(raw: string): raw is Clef {
+  return CLEFS.includes(raw as Clef);
+}
+
+export type Part = {
+  readonly kind: 'part';
+  readonly id: PartId;
+  readonly name: string;
+  readonly shortName: string;
+  readonly clef: Clef;
+};
+
+export type VoiceNote = {
+  readonly kind: 'voiceNote';
+  readonly id: string;
+  readonly partId: PartId;
+  readonly degree: number;
+  readonly accidental: Accidental;
+};
+
+export type Beat = {
+  readonly kind: 'beat';
+  readonly id: string;
+  readonly pulses: number;
+  readonly notes: readonly (VoiceNote | null)[];
+  readonly lyric: string | null;
+};
 
 export type Measure = {
   readonly kind: 'measure';
   readonly id: string;
-  readonly notes: readonly Note[];
+  readonly beats: readonly Beat[];
 };
 
 export type Section = {
@@ -17,6 +51,7 @@ export type Section = {
 
 export type Score = {
   readonly kind: 'score';
+  readonly parts: readonly Part[];
   readonly sections: readonly Section[];
 };
 
@@ -43,67 +78,137 @@ export type SerializedScore = {
   readonly spans: readonly Span[];
 };
 
-export function* iterateNotes(score: Score): Generator<Note> {
+export const DEFAULT_PARTS: readonly Part[] = [
+  { kind: 'part', id: 'soprano', name: 'Soprano', shortName: 'S', clef: 'treble' },
+  { kind: 'part', id: 'alto', name: 'Alto', shortName: 'A', clef: 'alto' },
+  { kind: 'part', id: 'tenor', name: 'Tenor', shortName: 'T', clef: 'treble8vb' },
+  { kind: 'part', id: 'bass', name: 'Bass', shortName: 'B', clef: 'bass' },
+];
+
+export function partsEqual(a: readonly Part[], b: readonly Part[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (part, index) =>
+      part.id === b[index]?.id &&
+      part.name === b[index]?.name &&
+      part.shortName === b[index]?.shortName &&
+      part.clef === b[index]?.clef,
+  );
+}
+
+export function partIndexOf(parts: readonly Part[], partId: PartId): number {
+  return parts.findIndex((part) => part.id === partId);
+}
+
+export function partOf(score: Score, partId: PartId): Part | undefined {
+  return score.parts.find((part) => part.id === partId);
+}
+
+export function* iterateBeats(score: Score): Generator<Beat> {
   for (const section of score.sections) {
     for (const measure of section.measures) {
-      for (const note of measure.notes) {
-        yield note;
-      }
+      yield* measure.beats;
     }
   }
 }
 
-export function notesOf(score: Score): Note[] {
-  return [...iterateNotes(score)];
+export function* iterateVoiceNotes(score: Score): Generator<VoiceNote> {
+  for (const beat of iterateBeats(score)) {
+    for (const note of beat.notes) {
+      if (note) yield note;
+    }
+  }
 }
 
-export function notesInSection(section: Section): Note[] {
-  return section.measures.flatMap((measure) => [...measure.notes]);
+export function voiceNotesOf(score: Score): VoiceNote[] {
+  return [...iterateVoiceNotes(score)];
 }
 
-export function findNote(score: Score, noteId: string): Note | undefined {
-  for (const note of iterateNotes(score)) {
+export function beatsOf(score: Score): Beat[] {
+  return [...iterateBeats(score)];
+}
+
+export function findVoiceNote(score: Score, noteId: string): VoiceNote | undefined {
+  for (const note of iterateVoiceNotes(score)) {
     if (note.id === noteId) return note;
   }
   return undefined;
 }
 
-export function sectionOfNote(score: Score, noteId: string): Section | undefined {
+export function findBeat(score: Score, beatId: string): Beat | undefined {
+  for (const beat of iterateBeats(score)) {
+    if (beat.id === beatId) return beat;
+  }
+  return undefined;
+}
+
+export function sectionOfBeat(score: Score, beatId: string): Section | undefined {
   for (const section of score.sections) {
     for (const measure of section.measures) {
-      for (const note of measure.notes) {
-        if (note.id === noteId) return section;
+      if (measure.beats.some((beat) => beat.id === beatId)) return section;
+    }
+  }
+  return undefined;
+}
+
+export function sectionOfVoiceNote(score: Score, noteId: string): Section | undefined {
+  for (const section of score.sections) {
+    for (const measure of section.measures) {
+      for (const beat of measure.beats) {
+        if (beat.notes.some((note) => note && note.id === noteId)) return section;
       }
     }
   }
   return undefined;
 }
 
-export function indexOfNote(score: Score, noteId: string): number {
-  let index = 0;
-  for (const note of iterateNotes(score)) {
-    if (note.id === noteId) return index;
-    index += 1;
-  }
-  return -1;
-}
-
-export function withNote(
+export function withVoiceNote(
   score: Score,
   noteId: string,
-  patch: Partial<Pick<Note, 'degree' | 'accidental' | 'pulses'>>,
+  patch: Partial<Pick<VoiceNote, 'degree' | 'accidental'>>,
 ): Score {
   let changed = false;
   const sections = score.sections.map((section) => {
     let sectionChanged = false;
     const measures = section.measures.map((measure) => {
-      if (!measure.notes.some((note) => note.id === noteId)) return measure;
+      if (!measure.beats.some((beat) => beat.notes.some((note) => note && note.id === noteId))) {
+        return measure;
+      }
       sectionChanged = true;
       return {
         ...measure,
-        notes: measure.notes.map((note) =>
-          note.id === noteId ? { ...note, ...patch } : note,
+        beats: measure.beats.map((beat) =>
+          beat.notes.some((note) => note && note.id === noteId)
+            ? {
+                ...beat,
+                notes: beat.notes.map((note) =>
+                  note && note.id === noteId ? { ...note, ...patch } : note,
+                ),
+              }
+            : beat,
         ),
+      };
+    });
+    if (sectionChanged) changed = true;
+    return sectionChanged ? { ...section, measures } : section;
+  });
+  return changed ? { ...score, sections } : score;
+}
+
+export function withBeat(
+  score: Score,
+  beatId: string,
+  patch: Partial<Pick<Beat, 'pulses' | 'lyric'>>,
+): Score {
+  let changed = false;
+  const sections = score.sections.map((section) => {
+    let sectionChanged = false;
+    const measures = section.measures.map((measure) => {
+      if (!measure.beats.some((beat) => beat.id === beatId)) return measure;
+      sectionChanged = true;
+      return {
+        ...measure,
+        beats: measure.beats.map((beat) => (beat.id === beatId ? { ...beat, ...patch } : beat)),
       };
     });
     if (sectionChanged) changed = true;
@@ -118,6 +223,30 @@ export function withSectionKey(score: Score, sectionId: string, key: Key): Score
     sections: score.sections.map((section) =>
       section.id === sectionId ? { ...section, key } : section,
     ),
+  };
+}
+
+export function withParts(score: Score, parts: readonly Part[]): Score {
+  const count = parts.length;
+  return {
+    ...score,
+    parts,
+    sections: score.sections.map((section) => ({
+      ...section,
+      measures: section.measures.map((measure) => ({
+        ...measure,
+        beats: measure.beats.map((beat) => {
+          const notes: (VoiceNote | null)[] = [];
+          for (let index = 0; index < count; index += 1) {
+            const candidate = beat.notes[index];
+            const part = parts[index];
+            if (candidate && part && candidate.partId === part.id) notes.push(candidate);
+            else notes.push(null);
+          }
+          return { ...beat, notes };
+        }),
+      })),
+    })),
   };
 }
 

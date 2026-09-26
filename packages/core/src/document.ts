@@ -1,17 +1,22 @@
-import { carryOverIds, reconcileIds } from './reconcile.js';
+import { reconcileScore } from './reconcile.js';
 import { parse } from './parse.js';
 import { serialize } from './serialize.js';
 import {
-  indexOfNote,
-  iterateNotes,
-  notesOf,
-  withNote,
+  findBeat,
+  findVoiceNote,
+  iterateVoiceNotes,
+  partOf,
+  voiceNotesOf,
+  withBeat,
   withSectionKey,
+  withVoiceNote,
+  DEFAULT_PARTS,
+  type Beat,
   type Key,
-  type Note,
   type ParseError,
   type Score,
   type Span,
+  type VoiceNote,
 } from './score.js';
 import type { Accidental } from './pitch.js';
 import { DEFAULT_KEY, MAX_PULSES, MIN_PULSES, mod12 } from './pitch.js';
@@ -34,20 +39,18 @@ export type DocumentState = {
 
 export type Command =
   | { readonly type: 'text/set'; readonly text: string; readonly coalesceKey?: string }
-  | {
-      readonly type: 'note/setDegree';
-      readonly noteId: string;
-      readonly degree: number;
-    }
+  | { readonly type: 'note/setDegree'; readonly noteId: string; readonly degree: number }
   | {
       readonly type: 'note/setAccidental';
       readonly noteId: string;
       readonly accidental: Accidental;
     }
-  | { readonly type: 'note/setPulses'; readonly noteId: string; readonly pulses: number }
+  | { readonly type: 'beat/setPulses'; readonly beatId: string; readonly pulses: number }
+  | { readonly type: 'lyric/set'; readonly beatId: string; readonly lyric: string | null }
   | { readonly type: 'note/select'; readonly noteIds: readonly string[] }
   | { readonly type: 'note/step'; readonly noteId: string; readonly delta: number }
   | { readonly type: 'key/set'; readonly key: Key }
+  | { readonly type: 'parts/set'; readonly parts: Score['parts'] }
   | { readonly type: 'history/undo' }
   | { readonly type: 'history/redo' };
 
@@ -55,7 +58,7 @@ type HistoryEntry = { text: string; coalesceKey: string | null };
 
 const HISTORY_LIMIT = 200;
 
-const EMPTY_SCORE: Score = { kind: 'score', sections: [] };
+const EMPTY_SCORE: Score = { kind: 'score', parts: DEFAULT_PARTS, sections: [] };
 
 const BOOTSTRAP_STATE: DocumentState = {
   text: '',
@@ -68,24 +71,6 @@ const BOOTSTRAP_STATE: DocumentState = {
   canRedo: false,
   revision: 0,
 };
-
-function replaceNotes(score: Score, notes: readonly Note[]): Score {
-  let index = 0;
-  return {
-    ...score,
-    sections: score.sections.map((section) => ({
-      ...section,
-      measures: section.measures.map((measure) => {
-        const nextNotes = measure.notes.map(() => {
-          const note = notes[index];
-          index += 1;
-          return note ?? { kind: 'note' as const, id: '', degree: 0, accidental: 0 as Accidental, pulses: 2 };
-        });
-        return { ...measure, notes: nextNotes };
-      }),
-    })),
-  };
-}
 
 export class SolfaDocument {
   private state: DocumentState = BOOTSTRAP_STATE;
@@ -129,13 +114,10 @@ export class SolfaDocument {
     if (recordHistory) this.pushHistory(this.state.text, null);
 
     const result = parse(text);
-    const previousNotes = notesOf(this.state.score);
-    const parsedNotes = notesOf(result.score);
-    const mapping = reconcileIds(previousNotes, parsedNotes);
-    const score = replaceNotes(result.score, carryOverIds(parsedNotes, mapping));
+    const score = reconcileScore(this.state.score, result.score);
 
     const valid = result.errors.length === 0;
-    const alive = new Set(parsedNotes.map((note) => note.id));
+    const alive = new Set(voiceNotesOf(score).map((note) => note.id));
     const selection = {
       noteIds: this.state.selection.noteIds.filter((id) => alive.has(id)),
     };
@@ -181,7 +163,7 @@ export class SolfaDocument {
       }
 
       case 'note/setDegree': {
-        const score = withNote(state.score, command.noteId, { degree: command.degree });
+        const score = withVoiceNote(state.score, command.noteId, { degree: command.degree });
         if (score === state.score) return state;
         return this.commitScore(score, command.noteId);
       }
@@ -189,25 +171,37 @@ export class SolfaDocument {
       case 'note/step': {
         const current = this.findNote(command.noteId);
         if (!current) return state;
-        const next = Math.max(0, Math.min(13, current.degree + command.delta));
+        const next = Math.max(-7, Math.min(21, current.degree + command.delta));
         if (next === current.degree) return state;
-        const score = withNote(state.score, command.noteId, { degree: next });
+        const score = withVoiceNote(state.score, command.noteId, { degree: next });
         return this.commitScore(score, command.noteId);
       }
 
       case 'note/setAccidental': {
-        const score = withNote(state.score, command.noteId, {
+        const score = withVoiceNote(state.score, command.noteId, {
           accidental: command.accidental,
         });
         if (score === state.score) return state;
         return this.commitScore(score, command.noteId);
       }
 
-      case 'note/setPulses': {
+      case 'beat/setPulses': {
         const pulses = Math.max(MIN_PULSES, Math.min(MAX_PULSES, command.pulses));
-        const score = withNote(state.score, command.noteId, { pulses });
+        const beat = findBeat(state.score, command.beatId);
+        if (!beat || beat.pulses === pulses) return state;
+        const score = withBeat(state.score, command.beatId, { pulses });
         if (score === state.score) return state;
-        return this.commitScore(score, command.noteId);
+        return this.commitScore(score);
+      }
+
+      case 'lyric/set': {
+        const beat = findBeat(state.score, command.beatId);
+        if (!beat) return state;
+        const lyric = command.lyric === null || command.lyric === '' ? null : command.lyric;
+        if (beat.lyric === lyric) return state;
+        const score = withBeat(state.score, command.beatId, { lyric });
+        if (score === state.score) return state;
+        return this.commitScore(score);
       }
 
       case 'key/set': {
@@ -215,6 +209,13 @@ export class SolfaDocument {
         if (!section) return state;
         const score = withSectionKey(state.score, section.id, command.key);
         if (score === state.score) return state;
+        return this.commitScore(score);
+      }
+
+      case 'parts/set': {
+        if (command.parts.length === 0) return state;
+        const score = reconcileScore(state.score, { ...state.score, parts: command.parts });
+        if (serializePartsEqual(score, state.score)) return state;
         return this.commitScore(score);
       }
 
@@ -256,16 +257,33 @@ export class SolfaDocument {
     }
   }
 
-  findNote(noteId: string): Note | undefined {
-    for (const note of iterateNotes(this.state.score)) {
-      if (note.id === noteId) return note;
+  findNote(noteId: string): VoiceNote | undefined {
+    return findVoiceNote(this.state.score, noteId);
+  }
+
+  beatOfNote(noteId: string): Beat | undefined {
+    for (const section of this.state.score.sections) {
+      for (const measure of section.measures) {
+        for (const beat of measure.beats) {
+          if (beat.notes.some((note) => note && note.id === noteId)) return beat;
+        }
+      }
     }
     return undefined;
   }
 
-  noteIndex(noteId: string): number {
-    return indexOfNote(this.state.score, noteId);
+  partOfNote(noteId: string) {
+    const note = this.findNote(noteId);
+    return note ? partOf(this.state.score, note.partId) : undefined;
   }
+
+  noteIds(): string[] {
+    return [...iterateVoiceNotes(this.state.score)].map((note) => note.id);
+  }
+}
+
+function serializePartsEqual(a: Score, b: Score): boolean {
+  return JSON.stringify(a.parts) === JSON.stringify(b.parts);
 }
 
 export function transposeKey(key: Key, semitones: number): Key {

@@ -65,3 +65,64 @@ body {
 .app-main {
   min-height: 0;
 }
+
+.app-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--solfa-border);
+  margin: 0 2px;
+}
+
+.solfa-button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--solfa-border);
+  background: var(--solfa-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.solfa-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.solfa-button-primary {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--solfa-key);
+  color: #fff;
+  cursor: pointer;
+}
+
+.solfa-button-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.solfa-save-note {
+  font-size: 12px;
+  color: var(--solfa-muted);
+  margin-right: auto;
+}
+
+.solfa-save-note[data-error="true"] {
+  color: var(--solfa-error);
+}
+
+.solfa-help-code {
+  font-family: var(--solfa-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--solfa-muted) 14%, transparent);
+  overflow-x: auto;
+}
